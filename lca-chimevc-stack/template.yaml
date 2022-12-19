@@ -4,7 +4,7 @@
 # You may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-    # http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,23 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-AWSTemplateFormatVersion: "2010-09-09"
+AWSTemplateFormatVersion: '2010-09-09'
 
-Description: Amazon Transcribe Live Call Analytics - Chime Voice Connector
+Description: Amazon Transcribe Live Call Analytics with Agent Assist - Chime Voice Connector
 
 Parameters:
-
   InstallDemoAsteriskServer:
     Type: String
     Default: true
     AllowedValues:
-        - true
-        - false
+      - true
+      - false
     Description: Set to true to automatically install a demo Asterisk server for testing Chime Voice Connector streaming.
 
   DemoSoftphoneAllowedCidr:
     Type: String
-    AllowedPattern: "( *|([0-9]{1,3}.){3}[0-9]{1,3}(/([0-9]|[1-2][0-9]|3[0-2])))"
+    AllowedPattern: '( *|([0-9]{1,3}.){3}[0-9]{1,3}(/([0-9]|[1-2][0-9]|3[0-2])))'
     Description: >
       Ignored if Install Demo Asterisk Server is false.
       CIDR block allowed by demo Asterisk server for soft phone registration.
@@ -36,39 +35,207 @@ Parameters:
 
   SiprecAllowedCidrList:
     Type: String
-    AllowedPattern: "( *|(([0-9]{1,3}.){3}[0-9]{1,3}(/([0-9]|[1-2][0-9]|3[0-2]))))(, *([0-9]{1,3}.){3}[0-9]{1,3}(/([0-9]|[1-2][0-9]|3[0-2])))*"
+    AllowedPattern: '( *|(([0-9]{1,3}.){3}[0-9]{1,3}(/([0-9]|[1-2][0-9]|3[0-2]))))(, *([0-9]{1,3}.){3}[0-9]{1,3}(/([0-9]|[1-2][0-9]|3[0-2])))*'
     Description: >
       Ignored if Install Demo Asterisk Server is true.
       Comma delimited list of public CIDR blocks allowed by Chime Voice Connector for SIPREC source hosts. Mask of /27 to /32 is allowed.
       Example: '198.51.100.0/27, 203.0.113.128/27'
 
+  SiprecLambdaHookFunctionArn:
+    Default: ''
+    Type: String
+    AllowedPattern: '^(|arn:aws:lambda:.*)$'
+    Description: >
+      (Optional) Used only when CallAudioSource is set to 'Chime Voice Connector (SIPREC)' or
+      'Demo Asterisk PBX Server'. If present, the specified Lambda function can selectively
+      choose calls to process, toggle agent/caller streams, assign AgentId, and/or modify values
+      for CallId and displayed phone numbers.
+
   DemoAsteriskDownloadUrl:
     Type: String
-    Default: https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-16-current.tar.gz
+    Default: https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-19-current.tar.gz
     Description: URL for Asterisk source distribution tar file download - see https://www.asterisk.org/
 
   DemoAsteriskAgentAudioURL:
     Type: String
     Default: https://raw.githubusercontent.com/aws-samples/amazon-transcribe-live-call-analytics/main/lca-chimevc-stack/demo-audio/agent.wav
     Description: URL for audio (agent.wav) file download for demo Asterisk server.
+  
+  
+
+  InstallDemoUnimrcpAsteriskModules:
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+    Description: Set to true to automatically install a demo unimrcp-Asterisk modules.
+  DemoUnimrcpServerIp:
+    Type: String
+    Default: 
+    Description: Unimrcp server ip
+  DemoTestNumberToCall:
+    Type: String
+    Default: +37498000662
+    Description: Number to call and test LCA
+
+  DemoUnimrcpDownloadUrl:
+    Type: String
+    Default: https://www.unimrcp.org/project/component-view/unimrcp-1-8-0-tar-gz/download 
+    Description: URL for Unimrcp source distribution tar file download - see https://www.unimrcp.org/
+  
+  S3BucketName:
+    Type: String
+    Description: >-
+      S3 Bucket name for recordings
+
+  AudioFilePrefix:
+    Type: String
+    Default: lca-audio-recordings/
+    Description: >-
+      The Amazon S3 prefix where the merged output audio files will be saved (must end in "/")
+
+  CallAnalyticsPrefix:
+    Type: String
+    Default: lca-call-analytics/
+    Description: The Amazon S3 prefix where the post-call analytics files will be saved, when using analytics api mode (must end in "/")
+
+  KinesisDataStreamName:
+    Type: String
+    Description: >-
+      Name of Kinesis Data Stream to publish events to
+
+  KinesisDataStreamArn:
+    Type: String
+    Description: >-
+      Arn of Kinesis Data Stream to publish events to
+
+  IsPartialTranscriptEnabled:
+    Type: String
+    Default: 'true'
+    Description: >-
+      Enable partial transcripts to receive low latency evolving transcriptions for each conversation turn. Set to false to process only the
+      final version of each conversation turn.
+    AllowedValues:
+      - 'true'
+      - 'false'
+
+  TranscribeApiMode:
+    Type: String
+    Default: analytics
+    AllowedValues:
+        - standard
+        - analytics
+    Description: Set the default operational mode for Transcribe
+
+  IsContentRedactionEnabled:
+    Type: String
+    Default: "false"
+    Description: >-
+      Enable content redaction from Amazon Transcribe transcription output. This is only used when
+      the 'en-US' language is selected in the TranscribeLanguageCode parameter.
+    AllowedValues:
+      - "true"
+      - "false"
+
+  TranscribeContentRedactionType:
+    Type: String
+    Default: PII
+    Description: >-
+      Type of content redaction from Amazon Transcribe transcription output
+    AllowedValues:
+      - PII
+
+  TranscribeLanguageCode:
+    Type: String
+    Description: >-
+      Language code to be used for Amazon Transcribe
+    Default: en-US
+    AllowedValues:
+      - en-US
+      - es-US
+      - en-GB
+      - fr-CA
+      - fr-FR
+      - en-AU
+      - it-IT
+      - de-DE
+      - pt-BR
+      - ja-JP
+      - ko-KR
+      - zh-CN
+
+  TranscribePiiEntityTypes:
+    Type: String
+    # yamllint disable rule:line-length
+    Default: BANK_ACCOUNT_NUMBER,BANK_ROUTING,CREDIT_DEBIT_NUMBER,CREDIT_DEBIT_CVV,CREDIT_DEBIT_EXPIRY,PIN,EMAIL,ADDRESS,NAME,PHONE,SSN
+    # yamllint enable rule:line-length
+    Description: >-
+      Select the PII entity types you want to identify or redact. Remove the values that you don't
+      want to redact from the default.  DO NOT ADD CUSTOM VALUES HERE.
+
+  CustomVocabularyName:
+    Type: String
+    Default: ''
+    Description: >-
+      The name of the vocabulary to use when processing the transcription job. Leave blank if no
+      custom vocabulary to be used. If yes, the custom vocabulary must pre-exist in your account.
+
+  CustomLanguageModelName:
+    Type: String
+    Default: ''
+    Description: >-
+      The name of the custom language model to use when processing the transcription job. Leave blank if no
+      custom language model is to be used. If specified, the custom language model must pre-exist in your account, 
+      match the Language Code selected above, and use the 'Narrow Band' base model.
+
+  PcaS3BucketName:
+    Type: String
+    Description: >
+      Value of PCA stack "InputBucket". Effective only Transcribe API Mode parameter is 'analytics'.
+    # yamllint disable rule:line-length
+    AllowedPattern: '( *|(?=^.{3,63}$)(?!^(\d+\.)+\d+$)(^(([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])\.)*([a-z0-9]|[a-z0-9][a-z0-9\-]*[a-z0-9])$))'
+    # yamllint enable rule:line-length
+
+  PcaTranscriptsPrefix:
+    Type: String
+    Default: originalTranscripts/
+    Description: Value of PCA stack "InputBucketTranscriptPrefix".
+
+  PcaPlaybackAudioFilePrefix:
+    Type: String
+    Default: mp3/
+    Description: Value of PCA stack "InputBucketPlaybackAudioPrefix".
+
+  PcaWebAppURL:
+    Type: String
+    AllowedPattern: '^(|https:\/\/.*)$'
+    Description: Value of PCA stack "WebAppURL". 
+
+  PcaWebAppCallPathPrefix:
+    Type: String
+    Default: dashboard/parsedFiles/
+    Description: PCA path prefix for call detail pages.
 
 Metadata:
-    AWS::CloudFormation::Interface:
-        ParameterGroups:
-            - Label:
-                default: Options
-              Parameters:
-                  - InstallDemoAsteriskServer
-                  - DemoSoftphoneAllowedCidr
-                  - SiprecAllowedCidrList
-
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Options
+        Parameters:
+          - InstallDemoAsteriskServer
+          - DemoSoftphoneAllowedCidr
+          - SiprecAllowedCidrList
 
 Conditions:
-  ShouldInstallDemoAsteriskServer: !Equals [!Ref InstallDemoAsteriskServer, 'true']
+  ShouldInstallDemoAsteriskServer:
+    !Equals [!Ref InstallDemoAsteriskServer, 'true']
+  ShouldInstallDemoUnimrcpAsteriskModules:
+    !Equals [!Ref InstallDemoUnimrcpAsteriskModules, 'true']
   ShouldInstallChimeVCsiprec: !Equals [!Ref InstallDemoAsteriskServer, 'false']
+  ShouldInstallPcaIntegration: !Not [!Equals [!Ref PcaS3BucketName, '']]
 
 Resources:
-
   DeployChimeVCAsteriskDemo:
     Type: AWS::CloudFormation::Stack
     Condition: ShouldInstallDemoAsteriskServer
@@ -78,6 +245,12 @@ Resources:
         SoftPhoneCIDR: !Ref DemoSoftphoneAllowedCidr
         DemoAsteriskDownloadUrl: !Ref DemoAsteriskDownloadUrl
         DemoAsteriskAgentAudioURL: !Ref DemoAsteriskAgentAudioURL
+        DemoAsteriskDownloadUrl: !Ref DemoAsteriskDownloadUrl
+        ShouldInstallDemoUnimrcpAsteriskModules: !Ref ShouldInstallDemoUnimrcpAsteriskModules
+        DemoTestNumberToCall: !Ref DemoTestNumberToCall
+        DemoUnimrcpDownloadUrl: !Ref DemoUnimrcpDownloadUrl
+        DemoUnimrcpServerIp: !Ref DemoUnimrcpServerIp
+
 
   DeployChimeVCsiprec:
     Type: AWS::CloudFormation::Stack
@@ -86,26 +259,61 @@ Resources:
       TemplateURL: ./cloudformation-templates/chime-vc-siprec.yaml
       Parameters:
         CidrBlocks: !Ref SiprecAllowedCidrList
+  
+  DeployCallTranscriber:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./cloudformation-templates/chime-vc-call-transcriber.yaml
+      Parameters:
+        TranscribeApiMode: !Ref TranscribeApiMode
+        AudioFilePrefix: !Ref AudioFilePrefix
+        CallAnalyticsPrefix: !Ref CallAnalyticsPrefix
+        KinesisDataStreamName: !Ref KinesisDataStreamName
+        KinesisDataStreamArn: !Ref KinesisDataStreamArn
+        S3BucketName: !Ref S3BucketName
+        IsPartialTranscriptEnabled: !Ref IsPartialTranscriptEnabled
+        IsContentRedactionEnabled: !Ref IsContentRedactionEnabled
+        TranscribeContentRedactionType: !Ref TranscribeContentRedactionType
+        TranscribeLanguageCode: !Ref TranscribeLanguageCode
+        TranscribePiiEntityTypes: !Ref TranscribePiiEntityTypes
+        CustomVocabularyName: !Ref CustomVocabularyName
+        CustomLanguageModelName: !Ref CustomLanguageModelName
+        SiprecLambdaHookFunctionArn: !Ref SiprecLambdaHookFunctionArn
+
+  DeployPcaIntegration:
+    Type: AWS::CloudFormation::Stack
+    Condition: ShouldInstallPcaIntegration
+    Properties:
+      TemplateURL: ./cloudformation-templates/pca-integration.yaml
+      Parameters:
+        KinesisDataStreamName: !Ref KinesisDataStreamName
+        KinesisDataStreamArn: !Ref KinesisDataStreamArn
+        CallTranscriberEventTableName: !GetAtt DeployCallTranscriber.Outputs.CallTranscriberEventTableName
+        CallTranscriberEventTableArn: !GetAtt DeployCallTranscriber.Outputs.CallTranscriberEventTableArn
+        IsContentRedactionEnabled: !GetAtt DeployCallTranscriber.Outputs.IsContentRedactionEnabled
+        LCAS3BucketName: !Ref S3BucketName
+        CallAnalyticsPrefix: !Ref CallAnalyticsPrefix
+        PcaS3BucketName: !Ref PcaS3BucketName
+        PcaTranscriptsPrefix: !Ref PcaTranscriptsPrefix
+        PcaPlaybackAudioFilePrefix: !Ref PcaPlaybackAudioFilePrefix
+        PcaWebAppURL: !Ref PcaWebAppURL
+        PcaWebAppCallPathPrefix: !Ref PcaWebAppCallPathPrefix
 
 Outputs:
-
   DemoPBXIPAddress:
-    Value:
-      !If
+    Value: !If
       - ShouldInstallDemoAsteriskServer
       - !GetAtt DeployChimeVCAsteriskDemo.Outputs.IPAddress
-      - "Demo PBX not enabled"
+      - 'Demo PBX not enabled'
 
   DemoPBXPhoneNumber:
-    Value:
-      !If
+    Value: !If
       - ShouldInstallDemoAsteriskServer
       - !GetAtt DeployChimeVCAsteriskDemo.Outputs.PhoneNumber
-      - "Demo PBX not enabled"
+      - 'Demo PBX not enabled'
 
   AsteriskInstanceId:
-    Value:
-      !If
+    Value: !If
       - ShouldInstallDemoAsteriskServer
       - !GetAtt DeployChimeVCAsteriskDemo.Outputs.InstanceID
-      - "Demo PBX not enabled"
+      - 'Demo PBX not enabled'

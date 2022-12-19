@@ -8,6 +8,7 @@ input AddTranscriptSegmentInput {
 	IsPartial: Boolean!
 	Channel: Channel!
 	CreatedAt: AWSDateTime
+	ExpiresAfter: AWSTimestamp
 	Sentiment: Sentiment
 	SentimentScore: SentimentScoreInput
 	SentimentWeighted: Float
@@ -19,14 +20,19 @@ type Call implements DynamoDbBase @aws_cognito_user_pools
 	SK: ID!
 	CreatedAt: AWSDateTime!
 	UpdatedAt: AWSDateTime!
-	ExpiresAfter: AWSDateTime
+	ExpiresAfter: AWSTimestamp
 	CallId: ID!
-	CustomerPhoneNumber: AWSPhone
+	CustomerPhoneNumber: String
 	Sentiment: SentimentAggregation
-	SystemPhoneNumber: AWSPhone
+	SystemPhoneNumber: String
 	Status: CallStatus
 	RecordingUrl: String
+	PcaUrl: String
 	TotalConversationDurationMillis: Float
+	AgentId: String
+	Metadatajson: String
+	CallCategories: [String]
+	IssuesDetected: String
 }
 
 type CallList @aws_cognito_user_pools
@@ -41,7 +47,7 @@ type CallListItem implements DynamoDbBase @aws_cognito_user_pools
 	SK: ID!
 	CreatedAt: AWSDateTime!
 	UpdatedAt: AWSDateTime!
-	ExpiresAfter: AWSDateTime
+	ExpiresAfter: AWSTimestamp
 	CallId: ID!
 }
 
@@ -55,12 +61,17 @@ enum CallStatus {
 enum Channel {
 	CALLER
 	AGENT
+	AGENT_ASSISTANT
+	CATEGORY_MATCH
 }
 
 input CreateCallInput {
 	CallId: ID!
-	CustomerPhoneNumber: AWSPhone
-	SystemPhoneNumber: AWSPhone
+	AgentId: String
+	CustomerPhoneNumber: String
+	SystemPhoneNumber: String
+	Metadatajson: String
+	ExpiresAfter: AWSTimestamp
 }
 
 type CreateCallOutput @aws_iam {
@@ -72,7 +83,7 @@ interface DynamoDbBase {
 	SK: ID!
 	CreatedAt: AWSDateTime!
 	UpdatedAt: AWSDateTime
-	ExpiresAfter: AWSDateTime
+	ExpiresAfter: AWSTimestamp
 }
 
 type Mutation @aws_iam {
@@ -80,6 +91,10 @@ type Mutation @aws_iam {
 	updateCallStatus(input: UpdateCallStatusInput!): Call
 	updateCallAggregation(input: UpdateCallAggregationInput!): Call
 	updateRecordingUrl(input: UpdateRecordingUrlInput!): Call
+	updatePcaUrl(input: UpdatePcaUrlInput!): Call
+	updateAgent(input: UpdateAgentInput!): Call
+	addCallCategory(input: AddCallCategoryInput!): Call
+	addIssuesDetected(input: AddIssuesDetectedInput!): Call
 	addTranscriptSegment(input: AddTranscriptSegmentInput!): TranscriptSegment
 }
 
@@ -173,7 +188,7 @@ type Subscription {
 	onCreateCall: CreateCallOutput
 		@aws_subscribe(mutations: ["createCall"])
 	onUpdateCall(CallId: ID): Call
-		@aws_subscribe(mutations: ["updateCallStatus","updateCallAggregation","updateRecordingUrl"])
+		@aws_subscribe(mutations: ["updateCallStatus","updateCallAggregation","updateRecordingUrl","updatePcaUrl","updateAgent", "addCallCategory", "addIssuesDetected"])
 	onAddTranscriptSegment(CallId: ID, Channel: String): TranscriptSegment
 		@aws_subscribe(mutations: ["addTranscriptSegment"])
 }
@@ -184,7 +199,7 @@ type TranscriptSegment implements DynamoDbBase @aws_cognito_user_pools
 	SK: ID!
 	CreatedAt: AWSDateTime!
 	UpdatedAt: AWSDateTime
-	ExpiresAfter: AWSDateTime
+	ExpiresAfter: AWSTimestamp
 	CallId: ID!
 	SegmentId: ID!
 	StartTime: Float!
@@ -203,6 +218,23 @@ type TranscriptSegmentList @aws_cognito_user_pools
 	nextToken: String
 }
 
+input UpdateAgentInput {
+	CallId: ID!
+	AgentId: String!
+	UpdatedAt: AWSDateTime
+}
+
+input AddCallCategoryInput {
+	CallId: ID!
+	CallCategories: [String]
+	UpdatedAt: AWSDateTime
+}
+
+input AddIssuesDetectedInput {
+	CallId: ID!
+	IssuesDetected: String!
+	UpdatedAt: AWSDateTime
+}
 input UpdateCallAggregationInput {
 	CallId: ID!
 	Status: CallStatus!
@@ -220,6 +252,12 @@ input UpdateCallStatusInput {
 input UpdateRecordingUrlInput {
 	CallId: ID!
 	RecordingUrl: String!
+	UpdatedAt: AWSDateTime
+}
+
+input UpdatePcaUrlInput {
+	CallId: ID!
+	PcaUrl: String!
 	UpdatedAt: AWSDateTime
 }
 

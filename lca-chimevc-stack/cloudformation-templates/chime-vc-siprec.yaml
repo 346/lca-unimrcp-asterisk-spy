@@ -13,19 +13,16 @@
 # limitations under the License.
 
 AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
 
-Description: Amazon Transcribe Live Call Analytics - Chime Voice Connector with SIPREC
+Description: Amazon Transcribe Live Call Analytics with Agent Assist - Chime Voice Connector with SIPREC
 
 Parameters:
   CidrBlocks:
     Type: CommaDelimitedList
     Description: Comma Delimited list of CIDR blocks that will be allow listed to send traffic to the Chime Voice Connector.  CIDR blocks must be between /27 and /32 in length and use public IP ranges.  Example 203.0.113.128/27, 198.51.100.76/32
 
-Conditions:
-  CIDRBlockExists: !Not
-    - !Equals
-      - !Join ["", !Ref CidrBlocks]
-      - ""
+
 Resources:
   CreateVCFunctionRole:
     Type: "AWS::IAM::Role"
@@ -141,18 +138,18 @@ Resources:
                 responseData = create_vc(event)
                 cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)                
               except Exception as e:
-                error = { 'error': f'Exception thrown: {e}'}
+                error = f'Exception thrown: {e}. Please see https://github.com/aws-samples/amazon-transcribe-live-call-analytics/blob/main/TROUBLESHOOTING.md for more information.'
                 print(error)
-                cfnresponse.send(event, context, cfnresponse.FAILED, error )   
+                cfnresponse.send(event, context, cfnresponse.FAILED, {}, reason=error )   
             elif event['RequestType'] == 'Delete':
               try:
                 delete_vc(event)
                 responseData = {'Message': 'Deleting VC.  Returning success status.'}                   
                 cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)                      
               except Exception as e:
-                error = { 'error': f'Exception thrown: {e}'}
+                error = f'Exception thrown: {e}. Please see https://github.com/aws-samples/amazon-transcribe-live-call-analytics/blob/main/TROUBLESHOOTING.md for more information.'
                 print(error)
-                cfnresponse.send(event, context, cfnresponse.FAILED, error )   
+                cfnresponse.send(event, context, cfnresponse.FAILED, {}, reason=error )   
             else:
                 responseData = {'Message': 'Update is no-op. Returning success status.'}
                 cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
@@ -167,6 +164,13 @@ Resources:
       CIDRBlocks: !If [CIDRBlockExists, !Ref CidrBlocks, !Ref "AWS::NoValue"]
     UpdateReplacePolicy: Delete
     DeletionPolicy: Delete
+
+Conditions:
+  CIDRBlockExists: !Not
+    - !Equals
+      - !Join ["", !Ref CidrBlocks]
+      - ""
+
 Outputs:
   VoiceConnector:
     Value:

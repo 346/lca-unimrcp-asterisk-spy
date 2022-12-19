@@ -63,6 +63,19 @@ pushd $dir
 ./publish.sh $BUCKET $PREFIX_AND_VERSION/lca-chimevc-stack $REGION || exit 1
 popd
 
+dir=lca-genesys-audiohook-stack
+echo "PACKAGING $dir"
+pushd $dir/deployment
+rm -rf ../out
+chmod +x ./build-s3-dist.sh
+./build-s3-dist.sh $BUCKET_BASENAME $PREFIX_AND_VERSION/lca-genesys-audiohook-stack $VERSION $REGION || exit 1
+popd
+
+dir=lca-connect-integration-stack
+echo "PACKAGING $dir"
+pushd $dir
+aws s3 cp ./template.yaml s3://${BUCKET}/${PREFIX_AND_VERSION}/lca-connect-integration-stack/template.yaml
+popd
 
 dir=lca-ai-stack
 echo "PACKAGING $dir"
@@ -70,6 +83,44 @@ pushd $dir/deployment
 rm -fr ../out
 chmod +x ./build-s3-dist.sh
 ./build-s3-dist.sh $BUCKET_BASENAME $PREFIX_AND_VERSION/lca-ai-stack $VERSION $REGION || exit 1
+popd
+
+dir=lca-kendra-stack
+echo "PACKAGING $dir"
+pushd $dir
+aws s3 cp ./template.yaml s3://${BUCKET}/${PREFIX_AND_VERSION}/lca-kendra-stack/template.yaml
+popd
+
+dir=submodule-aws-qnabot
+echo "PACKAGING $dir"
+git submodule init
+git submodule update
+echo "Applying patch files to simplify UX by removing some QnABot options not needed for LCA"
+cp -v ./patches/qnabot/lambda_schema_qna.js $dir/lambda/schema/qna.js
+cp -v ./patches/qnabot/website_js_admin.vue $dir/website/js/admin.vue
+cp -v ./patches/qnabot/Makefile $dir/Makefile
+echo "modify QnABot version string from 'N.N.N' to 'N.N.N-LCA'"
+sed -i 's/"version": *"\([0-9]*\.[0-9]*\.[0-9]*\)"/"version": "\1-LCA"/' $dir/package.json
+pushd $dir
+mkdir -p build/templates/dev
+cat > config.json <<_EOF
+{
+  "profile": "${AWS_PROFILE:-default}",
+  "region": "${REGION}",
+  "buildType": "Custom",
+  "skipCheckTemplate":true
+}
+_EOF
+npm install
+npm run build || exit 1
+aws s3 sync ./build/ s3://${BUCKET}/${PREFIX_AND_VERSION}/aws-qnabot/ --delete 
+popd
+
+dir=lca-agentassist-setup-stack
+echo "PACKAGING $dir"
+pushd $dir
+aws s3 cp ./template.yaml s3://${BUCKET}/${PREFIX_AND_VERSION}/lca-agentassist-setup-stack/template.yaml
+aws s3 cp ./qna-aa-demo.jsonl s3://${BUCKET}/${PREFIX_AND_VERSION}/lca-agentassist-setup-stack/qna-aa-demo.jsonl
 popd
 
 echo "PACKAGING Main Stack Cfn artifacts"
@@ -88,6 +139,10 @@ sed -e "s%<REGION_TOKEN>%$REGION%g" > $tmpdir/$MAIN_TEMPLATE
 # upload main template
 aws s3 cp $tmpdir/$MAIN_TEMPLATE s3://${BUCKET}/${PREFIX}/$MAIN_TEMPLATE || exit 1
 
+template="https://s3.${REGION}.amazonaws.com/${BUCKET}/${PREFIX}/${MAIN_TEMPLATE}"
+echo "Validating template: $template"
+aws cloudformation validate-template --template-url $template > /dev/null || exit 1
+
 if $PUBLIC; then
   echo "Setting public read ACLs on published artifacts"
   files=$(aws s3api list-objects --bucket ${BUCKET} --prefix ${PREFIX} --query "(Contents)[].[Key]" --output text)
@@ -97,14 +152,10 @@ if $PUBLIC; then
     done
 fi
 
-template="https://s3.${REGION}.amazonaws.com/${BUCKET}/${PREFIX}/${MAIN_TEMPLATE}"
-echo "Validating template: $template"
-aws cloudformation validate-template --template-url $template > /dev/null || exit 1
-
 echo "OUTPUTS"
 echo Template URL: $template
-echo CF Launch URL: https://${REGION}.console.aws.amazon.com/cloudformation/home?region=${REGION}#/stacks/create/review?templateURL=${template}\&stackName=LiveCallAnalytics\&param_installDemoAsteriskServer=true
-echo CLI Deploy: aws cloudformation deploy --region $REGION --template-file $tmpdir/$MAIN_TEMPLATE --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND --stack-name LiveCallAnalytics --parameter-overrides AdminEmail='jdoe@example.com' installDemoAsteriskServer=true demoSoftphoneAllowedCidr=CIDRBLOCK siprecAllowedCidrList=\"\" S3BucketName=\"\"
+echo CF Launch URL: https://${REGION}.console.aws.amazon.com/cloudformation/home?region=${REGION}#/stacks/create/review?templateURL=${template}\&stackName=LCA
+echo CLI Deploy: aws cloudformation deploy --region $REGION --template-file $tmpdir/$MAIN_TEMPLATE --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND --stack-name LCA --parameter-overrides AdminEmail='jdoe@example.com' CallAudioSource='Demo Asterisk PBX Server' demoSoftphoneAllowedCidr=CIDRBLOCK siprecAllowedCidrList=\"\" S3BucketName=\"\"
 echo Done
 exit 0
 

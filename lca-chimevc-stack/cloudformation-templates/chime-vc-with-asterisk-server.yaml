@@ -12,16 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-AWSTemplateFormatVersion: "2010-09-09"
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
 
-Description: Amazon Transcribe Live Call Analytics - Chime Voice Connector with Asterisk demo server
+Description: Amazon Transcribe Live Call Analytics with Agent Assist - Chime Voice Connector with Asterisk demo server
 
 Parameters:
   InstanceType:
     Description: Instance type to launch EC2 instances.
     Type: String
-    Default: t4g.large
-    AllowedValues: [t4g.micro, t4g.small, t4g.medium, t4g.large]
+    Default: c6g.large
+    AllowedValues: [c6g.medium, c6g.large, c6g.xlarge, c6g.2xlarge]
   LatestImageId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-arm64-gp2
@@ -32,11 +33,25 @@ Parameters:
     ConstraintDescription: Must be a valid public CIDR block in the form x.x.x.x/y
   DemoAsteriskDownloadUrl:
     Type: String
-    Default: https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-16-current.tar.gz
+    Default: https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-19-current.tar.gz
     Description: URL for Asterisk source distribution tar file download - see https://www.asterisk.org/
+  DemoUnimrcpDownloadUrl:
+    Type: String
+    Default: https://www.unimrcp.org/project/component-view/unimrcp-1-8-0-tar-gz/download 
+    Description: URL for Unimrcp source distribution tar file download - see https://www.unimrcp.org/
+  DemoUnimrcpServerIp:
+    Type: String
+    Default: 
+    Description: Unimrcp server ip
   DemoAsteriskAgentAudioURL:
     Type: String
+    Default: https://raw.githubusercontent.com/aws-samples/amazon-transcribe-live-call-analytics/main/lca-chimevc-stack/demo-audio/agent.wav
     Description: URL for audio (agent.wav) file download for demo Asterisk server.
+  DemoTestNumberToCall:
+    Type: String
+    Default: +37498000662
+    Description: Number to call and test LCA
+  
   Ec2Troubleshoot:
     Description: >
       Controls whether cloud init errors cause the stack to fail. Set to
@@ -46,8 +61,7 @@ Parameters:
     AllowedValues:
       - true
       - false
-Conditions:
-  SoftPhoneCIDRExists: !Not [!Equals [!Ref SoftPhoneCIDR, ""]]
+
 Resources:
   AsteriskVPC:
     Type: AWS::EC2::VPC
@@ -58,7 +72,7 @@ Resources:
       InstanceTenancy: default
       Tags:
         - Key: Name
-          Value: Ec2CdkStack/VPC
+          Value: LCAAsterisk/VPC
   AsteriskSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -68,7 +82,7 @@ Resources:
       AvailabilityZone:
         Fn::Select:
           - 0
-          - Fn::GetAZs: ""
+          - Fn::GetAZs: ''
       MapPublicIpOnLaunch: true
       Tags:
         - Key: aws-cdk:subnet-name
@@ -76,7 +90,7 @@ Resources:
         - Key: aws-cdk:subnet-type
           Value: Public
         - Key: Name
-          Value: Ec2CdkStack/VPC/asteriskSubnet1
+          Value: LCAAsterisk/VPC/asteriskSubnet1
   AsteriskSubnet1RouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -84,7 +98,7 @@ Resources:
         Ref: AsteriskVPC
       Tags:
         - Key: Name
-          Value: Ec2CdkStack/VPC/asteriskSubnet1
+          Value: LCAAsterisk/VPC/asteriskSubnet1
   AsteriskSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -111,7 +125,7 @@ Resources:
       AvailabilityZone:
         Fn::Select:
           - 1
-          - Fn::GetAZs: ""
+          - Fn::GetAZs: ''
       MapPublicIpOnLaunch: true
       Tags:
         - Key: aws-cdk:subnet-name
@@ -119,7 +133,7 @@ Resources:
         - Key: aws-cdk:subnet-type
           Value: Public
         - Key: Name
-          Value: Ec2CdkStack/VPC/asteriskSubnet2
+          Value: LCAAsterisk/VPC/asteriskSubnet2
   AsteriskSubnet2RouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -127,7 +141,7 @@ Resources:
         Ref: AsteriskVPC
       Tags:
         - Key: Name
-          Value: Ec2CdkStack/VPC/asteriskSubnet2
+          Value: LCAAsterisk/VPC/asteriskSubnet2
   AsteriskSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -150,7 +164,7 @@ Resources:
     Properties:
       Tags:
         - Key: Name
-          Value: Ec2CdkStack/VPC
+          Value: LCAAsterisk/VPC
   VPCGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
@@ -165,7 +179,7 @@ Resources:
       SecurityGroupEgress:
         - CidrIp: 0.0.0.0/0
           Description: Allow all outbound traffic by default
-          IpProtocol: "-1"
+          IpProtocol: '-1'
       SecurityGroupIngress:
         - CidrIp: 3.80.16.0/23
           Description: Allow Chime Voice Connector Signaling Access
@@ -218,9 +232,13 @@ Resources:
           IpProtocol: udp
           ToPort: 65535
         - CidrIp:
-            !If [SoftPhoneCIDRExists, !Ref SoftPhoneCIDR, !Ref "AWS::NoValue"]
+            !If [SoftPhoneCIDRExists, !Ref SoftPhoneCIDR, !Ref 'AWS::NoValue']
           Description: Soft Phone CIDR
-          IpProtocol: "-1"
+          IpProtocol: '-1'
+        - CidrIp:
+            !If [DemoUnimrcpServerIp, !Ref DemoUnimrcpServerIp, !Ref 'AWS::NoValue']
+          Description: Unimrcp server ip
+          IpProtocol: '-1'
       VpcId:
         Ref: AsteriskVPC
   InstanceRole:
@@ -233,14 +251,14 @@ Resources:
             Principal:
               Service:
                 Fn::Join:
-                  - ""
+                  - ''
                   - - ec2.
                     - Ref: AWS::URLSuffix
-        Version: "2012-10-17"
+        Version: '2012-10-17'
       ManagedPolicyArns:
         - Fn::Join:
-            - ""
-            - - "arn:"
+            - ''
+            - - 'arn:'
               - Ref: AWS::Partition
               - :iam::aws:policy/AmazonSSMManagedInstanceCore
   InstanceDefaultPolicy:
@@ -256,12 +274,12 @@ Resources:
             Effect: Allow
             Resource:
               Fn::Join:
-                - ""
-                - - "arn:"
+                - ''
+                - - 'arn:'
                   - Ref: AWS::Partition
-                  - ":ssm:"
+                  - ':ssm:'
                   - Ref: AWS::Region
-                  - ":"
+                  - ':'
                   - Ref: AWS::AccountId
                   - :parameter
                   - Ref: SSMPhoneNumber
@@ -273,12 +291,12 @@ Resources:
             Effect: Allow
             Resource:
               Fn::Join:
-                - ""
-                - - "arn:"
+                - ''
+                - - 'arn:'
                   - Ref: AWS::Partition
-                  - ":ssm:"
+                  - ':ssm:'
                   - Ref: AWS::Region
-                  - ":"
+                  - ':'
                   - Ref: AWS::AccountId
                   - :parameter
                   - Ref: SSMvoiceConnector
@@ -290,16 +308,16 @@ Resources:
             Effect: Allow
             Resource:
               Fn::Join:
-                - ""
-                - - "arn:"
+                - ''
+                - - 'arn:'
                   - Ref: AWS::Partition
-                  - ":ssm:"
+                  - ':ssm:'
                   - Ref: AWS::Region
-                  - ":"
+                  - ':'
                   - Ref: AWS::AccountId
                   - :parameter
                   - Ref: SSMOutboundHostname
-        Version: "2012-10-17"
+        Version: '2012-10-17'
       PolicyName: InstanceDefaultPolicy
       Roles:
         - Ref: InstanceRole
@@ -331,11 +349,11 @@ Resources:
             Effect: Allow
             Principal:
               Service: lambda.amazonaws.com
-        Version: "2012-10-17"
+        Version: '2012-10-17'
       ManagedPolicyArns:
         - Fn::Join:
-            - ""
-            - - "arn:"
+            - ''
+            - - 'arn:'
               - Ref: AWS::Partition
               - :iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
@@ -357,9 +375,10 @@ Resources:
                   - cloudformation:DescribeStacks
                   - iam:CreateServiceLinkedRole
                   - iam:PutRolePolicy
+                  - logs:ListLogDeliveries
                 Effect: Allow
-                Resource: "*"
-            Version: "2012-10-17"
+                Resource: '*'
+            Version: '2012-10-17'
           PolicyName: chimePolicy
   createVCLambda:
     Type: AWS::Lambda::Function
@@ -498,9 +517,9 @@ Resources:
                     authorizeEIP(voiceConnector['voiceConnectorId'], elasticIP)
                     cfnresponse.send(event, context, cfnresponse.SUCCESS, voiceConnector, physical_id)
                   except Exception as e:
-                    error = { 'Error': f'Exception thrown: {e}. Please see https://github.com/aws-samples/amazon-transcribe-live-call-analytics/blob/main/TROUBLESHOOTING.md for more information.'}
+                    error = f'Exception thrown: {e}. Please see https://github.com/aws-samples/amazon-transcribe-live-call-analytics/blob/main/TROUBLESHOOTING.md for more information.'
                     print(error)
-                    cfnresponse.send(event, context, cfnresponse.FAILED, error )                    
+                    cfnresponse.send(event, context, cfnresponse.FAILED, {}, reason=error )                    
               elif event['RequestType'] == 'Delete':
                   try:              
                     physical_id = 'VoiceConnectorResources'
@@ -529,9 +548,9 @@ Resources:
                       responseData = {'Message': 'No Cloudformation Output. Returning success status.'}
                       cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)                      
                   except Exception as e:
-                    error = { 'Error': f'Exception thrown: {e}. Please see https://github.com/aws-samples/amazon-transcribe-live-call-analytics/blob/main/TROUBLESHOOTING.md for more information.'}
+                    error = f'Exception thrown: {e}. Please see https://github.com/aws-samples/amazon-transcribe-live-call-analytics/blob/main/TROUBLESHOOTING.md for more information.'
                     print(error)
-                    cfnresponse.send(event, context, cfnresponse.FAILED, error )                      
+                    cfnresponse.send(event, context, cfnresponse.FAILED, {}, reason=error )                      
               else:
                   responseData = {'Message': 'Update is no-op. Returning success status.'}
                   cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
@@ -595,7 +614,7 @@ Resources:
       AvailabilityZone:
         Fn::Select:
           - 0
-          - Fn::GetAZs: ""
+          - Fn::GetAZs: ''
       IamInstanceProfile:
         Ref: InstanceProfile
       ImageId: !Ref LatestImageId
@@ -608,12 +627,36 @@ Resources:
         Ref: AsteriskSubnet1
       Tags:
         - Key: Name
-          Value: !Sub "AsteriskInstance-${AWS::StackName}"
+          Value: !Sub 'AsteriskInstance-${AWS::StackName}'
+      # Use Multi-part MIME user data so we can set config to run userdata always on instance reboot.
+      # See: https://aws.amazon.com/premiumsupport/knowledge-center/execute-user-data-ec2/
       UserData:
         Fn::Base64: !Sub |
-          #!/bin/bash -xe
+          Content-Type: multipart/mixed; boundary="//"
+          MIME-Version: 1.0
 
-          # trap errors and handle cfn signals
+          --//
+          Content-Type: text/cloud-config; charset="us-ascii"
+          MIME-Version: 1.0
+          Content-Transfer-Encoding: 7bit
+          Content-Disposition: attachment; filename="cloud-config.txt"
+
+          #cloud-config
+          cloud_final_modules:
+          - [scripts-user, always]
+
+          --//
+          Content-Type: text/x-shellscript; charset="us-ascii"
+          MIME-Version: 1.0
+          Content-Transfer-Encoding: 7bit
+          Content-Disposition: attachment; filename="userdata.txt"
+
+          #!/bin/bash -xe
+          echo "remove old userdata for upgraded servers, if it exists"
+          rm -f /var/lib/cloud/instance/scripts/part-001 
+          echo ====================================
+          echo trap errors and handle cfn signals
+          echo ====================================
           completed=0
           function error_exit
           {
@@ -622,24 +665,40 @@ Resources:
               local exit_code=${!2:-1}
               local troubleshoot=${Ec2Troubleshoot}
               [[ $troubleshoot == 'false' ]] && {
-                /opt/aws/bin/cfn-signal -e $exit_code -r "$error_reason" '${InstanceInitWaitHandle}'
+                /opt/aws/bin/cfn-signal -e $exit_code -r "$error_reason" '${InstanceInitWaitHandle}' || true
                 exit $exit_code
               }
             fi
-            /opt/aws/bin/cfn-signal --success true '${InstanceInitWaitHandle}'
+            /opt/aws/bin/cfn-signal --success true '${InstanceInitWaitHandle}' || true
           }
           trap error_exit EXIT
 
+          echo ================================
+          echo install OS updates and packages
+          echo ================================
           HOMEDIR=/home/ec2-user
+          AGIBINDIR=/var/lib/asterisk/agi-bin
+          MRCPCONF=/etc/asterisk/mrcp.conf
           yum update -y
           yum install -y aws-cfn-bootstrap
           yum install net-tools -y
           yum install wget -y
-          yum -y install make gcc gcc-c++ make subversion libxml2-devel ncurses-devel openssl-devel vim-enhanced man glibc-devel autoconf libnewt kernel-devel kernel-headers linux-headers openssl-devel zlib-devel libsrtp libsrtp-devel uuid libuuid-devel mariadb-server jansson-devel libsqlite3x libsqlite3x-devel epel-release.noarch bash-completion bash-completion-extras unixODBC unixODBC-devel libtool-ltdl libtool-ltdl-devel mysql-connector-odbc mlocate libiodbc sqlite sqlite-devel sql-devel.i686 sqlite-doc.noarch sqlite-tcl.x86_64 patch libedit-devel jq
-          cd /tmp
-          wget ${DemoAsteriskDownloadUrl}
-          tar xvzf asterisk-16-current.tar.gz 
-          cd asterisk-16*/
+          yum -y install make gcc gcc-c++ make subversion git libxml2-devel ncurses-devel openssl-devel vim-enhanced man glibc-devel autoconf libnewt kernel-devel kernel-headers linux-headers openssl-devel zlib-devel libsrtp libsrtp-devel uuid libuuid-devel mariadb-server jansson-devel libsqlite3x libsqlite3x-devel epel-release.noarch bash-completion bash-completion-extras unixODBC unixODBC-devel automake  libtool libtool-ltdl libtool-ltdl-devel mysql-connector-odbc mlocate libiodbc sqlite sqlite-devel sql-devel.i686 sqlite-doc.noarch sqlite-tcl.x86_64 patch libedit-devel jq
+
+          echo ================================
+          echo Download and extract asterisk
+          echo ================================
+          tmpdir=/tmp/asterisk
+          rm -fr $tmpdir
+          mkdir -p $tmpdir
+          cd $tmpdir
+          wget -O asterisk.tar.gz ${DemoAsteriskDownloadUrl}
+          tar xvzf asterisk.tar.gz
+
+          echo ================================
+          echo Build and install asterisk
+          echo ================================
+          cd asterisk-*
           ./configure --libdir=/usr/lib64 --with-jansson-bundled
           make menuselect.makeopts
           menuselect/menuselect \
@@ -652,17 +711,102 @@ Resources:
                   menuselect.makeopts
           make 
           make install
+          make install-headers
           make basic-pbx
           touch /etc/redhat-release
           make config
           ldconfig
+
+          echo ================================
+          echo Create asterisk configuration
+          echo ================================
           PASSWORD=$( curl http://169.254.169.254/latest/meta-data/instance-id)
           IP=$( curl http://169.254.169.254/latest/meta-data/public-ipv4 )
           REGION=$( curl http://169.254.169.254/latest/meta-data/placement/region )
           PhoneNumber=$( aws ssm get-parameter --name /${AWS::StackName}/phoneNumber --region $REGION | jq -r '.Parameter.Value' )
           VoiceConnectorHost=$( aws ssm get-parameter --name /${AWS::StackName}/voiceConnector --region $REGION | jq -r '.Parameter.Value' )
           OutboundHostName=$( aws ssm get-parameter --name /${AWS::StackName}/outboundHostName --region $REGION | jq -r '.Parameter.Value' )
+          AgiTranscribe=
           curl -L ${DemoAsteriskAgentAudioURL} --output /var/lib/asterisk/sounds/agent.wav
+          curl -L ${AgiTranscribe} --output $AGIBINDIR/transcribe/agi_transcribe.py
+          curl -L ${AgiTranscribe} --output $AGIBINDIR/transcribe/dinamodb.py
+          sed -i  's/DINAMO_DB_EVENT_TABLE=''/AWS_REGION='$EventSourcingTableName'/gI' $AGIBINDIR/transcribe/config.py
+          sed -i  's/DINAMO_DB_TRANSCRIBE_TABLE=''/AWS_REGION='$EventSourcingTableName'/gI' $AGIBINDIR/transcribe/config.py
+          if test "${ShouldInstallDemoUnimrcpAsteriskModules}" = true; 
+          then
+            pip3 install pyst2
+            pip3 install boto3
+
+            cd $tmpdir
+            wget http://www.unimrcp.org/project/component-view/unimrcp-deps-1-6-0-tar-gz/download -O unimrcp-deps-1.6.0.tar.gz
+            tar xvzf unimrcp-deps-1.6.0.tar.gz
+            cd unimrcp-deps-1.6.0/
+            sed -i  's/interactive/silent/gI' build-dep-libs.sh
+            sed -i  's:./configure --with-glib=no --without-doxygen --prefix=${SOFIA_INSTALLDIR}:./configure  CFLAGS=-fPIC --with-glib=no --enable-shared=yes  --without-doxygen --prefix=${SOFIA_INSTALLDIR} --build=aarch64-unknown-linux-gnu:gI' build-dep-libs.sh
+            ./build-dep-libs.sh
+            
+            cd $tmpdir
+            wget ${DemoUnimrcpDownloadUrl} -O unimrcp.tar.gz
+            tar xvzf unimrcp.tar.gz
+            echo ================================
+            echo Build and install unimrcp
+            echo ================================
+            cd unimrcp-1.8.0/
+            ./bootstrap
+            ./configure --with-apr=/usr/local/apr --with-apr-util=/usr/local/apr --host=aarch64-unknown-linux-gnu --build=aarch64-unknown-linux-gnu CFLAGS=-fPIC
+            make
+            make install
+            cd $tmpdir
+            wget https://www.unimrcp.org/project/component-view/asterisk-unimrcp-1-10-0-tar-gz/download -O asterisk-unimrcp-1.10.0.tar.gz
+
+            tar xvzf asterisk-unimrcp-1.10.0.tar.gz
+            cd asterisk-unimrcp-1.10.0/
+            ./bootstrap
+            CFLAGS=-fPIC ./configure --prefix=/usr/lib64/asterisk/modules --build=aarch64-unknown-linux-gnu --enable-shared=yes
+            make
+            make install
+            sed -i  's/server-ip = 10.0.0.2/server-ip = ${DemoUnimrcpServerIp}/gI' $MRCPCONF
+            sed -i  's/client-ip = 10.0.0.1/client-ip = $IP/gI' $MRCPCONF
+            sed -i  's/rtp-ip = 10.0.0.1/rtp-ip = $IP/gI' $MRCPCONF
+            echo "; extensions.conf - the Asterisk dial plan
+            ;
+            [general]
+            static=yes
+            writeprotect=no
+            clearglobalvars=no
+
+            [from-phone]
+            exten => $PhoneNumber,1,Set(SPYGROUP=3300)
+            
+            exten => $PhoneNumber,2,verbose(${CHANNEL(pjsip,call-id)}) 
+            exten => $PhoneNumber,3,Dial(PJSIP/$DemoTestNumberToCall,20,tU(originate__spy^${CHANNEL(pjsip,call-id)},${CALLERID(num)}))
+
+            exten=> 786,1,verbose(${SPYCHANNEL} ${CHANNEL(pjsip,call-id)}) 
+            exten => 786,2,agi(transcribe/agi_transcribe.py)
+
+            [originate__spy]
+            exten=> s,1,Set(SPYGROUP=3303)
+
+            exten => s,2,verbose("start spy on  channels " ${SPYGROUP} )
+
+            same => n,Originate(local/786@from-phone1,app,Chanspy,",g(3300)Eoq",,,av(SPYCHANNEL=CALLER^GLOBALID=${ARG1}))
+
+            same => n,Originate(local/786@from-phone1,app,Chanspy,",g(3303)Eoq",,,v(SPYCHANNEL=AGENT^GLOBALID=${ARG1}))
+              
+            " > /etc/asterisk/extensions.conf
+
+            
+          
+          ; fi;
+
+          
+          echo =========================================
+          echo Create crontab to reload asterisk hourly
+          echo =========================================
+          echo '0 * * * * /sbin/asterisk -rx "core reload"' > /etc/asterisk/crontab.txt # every hour (doesn't disrupt in-progress calls)
+          crontab /etc/asterisk/crontab.txt
+
+          
 
           echo "[udp]
           type=transport
@@ -671,6 +815,7 @@ Resources:
           external_media_address=$IP
           external_signaling_address=$IP
           allow_reload=yes
+
           [VoiceConnector]
           type=endpoint
           context=from-voiceConnector
@@ -681,13 +826,16 @@ Resources:
           direct_media=no
           ice_support=yes
           force_rport=yes
+
           [VoiceConnector]
           type=identify
           endpoint=VoiceConnector
           match=$OutboundHostName
+
           [VoiceConnector]
           type=aor
           contact=sip:$OutboundHostName
+
           [$PhoneNumber]
           type=endpoint
           context=from-phone
@@ -701,40 +849,50 @@ Resources:
           rewrite_contact=yes
           ice_support=yes
           force_rport=yes
+
           [$PhoneNumber]
           type=auth
           auth_type=userpass
           password=$PASSWORD
           username=$PhoneNumber
+
           [$PhoneNumber]
           type=aor
           max_contacts=5" > /etc/asterisk/pjsip.conf
 
-          echo "; extensions.conf - the Asterisk dial plan
-          ;
-          [general]
-          static=yes
-          writeprotect=no
-          clearglobalvars=no
-          [catch-all]
-          exten => _[+0-9].,1,Answer()
-          exten => _[+0-9].,n,Wait(1)
-          exten => _[+0-9].,n,Playback(agent)
-          exten => _[+0-9].,n,Wait(1)
-          exten => _[+0-9].,n,echo()
-          exten => _[+0-9].,n,Wait(1)
-          exten => _[+0-9].,n,Hangup()
-          [from-phone]
-          include => outbound_phone
-          [outbound_phone]
-          exten => _+X.,1,NoOP(Outbound Normal)
-          same => n,Dial(PJSIP/\${!EXTEN}@VoiceConnector,20)
-          same => n,Congestion
-          [from-voiceConnector]
-          include => phones
-          include => catch-all
-          [phones]
-          exten => $PhoneNumber,1,Dial(PJSIP/$PhoneNumber)" > /etc/asterisk/extensions.conf
+          if test "${ShouldInstallDemoUnimrcpAsteriskModules}" = true; 
+          then
+            echo "; extensions.conf - the Asterisk dial plan
+            ;
+            [general]
+            static=yes
+            writeprotect=no
+            clearglobalvars=no
+
+            [catch-all]
+            exten => _[+0-9].,1,Answer()
+            exten => _[+0-9].,n,Wait(1)
+            exten => _[+0-9].,n,Playback(agent)
+            exten => _[+0-9].,n,Wait(1)
+            exten => _[+0-9].,n,echo()
+            exten => _[+0-9].,n,Wait(1)
+            exten => _[+0-9].,n,Hangup()
+
+            [from-phone]
+            include => outbound_phone
+
+            [outbound_phone]
+            exten => _+X.,1,NoOP(Outbound Normal)
+            same => n,Dial(PJSIP/\${!EXTEN}@VoiceConnector,20)
+            same => n,Congestion
+
+            [from-voiceConnector]
+            include => phones
+            include => catch-all
+
+            [phones]
+            exten => $PhoneNumber,1,Dial(PJSIP/$PhoneNumber)" > /etc/asterisk/extensions.conf
+          ;fi;
 
           echo "[options]
           runuser = asterisk
@@ -745,32 +903,38 @@ Resources:
           console = verbose,notice,warning,error
           messages = notice,warning,error" > /etc/asterisk/logger.conf
 
-          groupadd asterisk
-          useradd -r -d /var/lib/asterisk -g asterisk asterisk
+          groupadd asterisk || echo "Group already exists"
+          useradd -r -d /var/lib/asterisk -g asterisk asterisk || echo "User already exists"
           usermod -aG audio,dialout asterisk
           chown -R asterisk.asterisk /etc/asterisk
           chown -R asterisk.asterisk /var/lib/asterisk
           chown -R asterisk.asterisk /var/log/asterisk
           chown -R asterisk.asterisk /var/spool/asterisk
 
-          systemctl start asterisk
+          echo ================================
+          echo Start asterisk and exit
+          echo ================================
+          systemctl restart asterisk
           completed=1
           exit
+
+          --//--
+      
+        
     DependsOn:
       - InstanceDefaultPolicy
       - InstanceRole
 
   InstanceInitWaitHandle:
     Type: AWS::CloudFormation::WaitConditionHandle
-    DependsOn: 
-      voiceConnectorResource
+    DependsOn: voiceConnectorResource
 
   # Allow 30 minutes max to receive signal from instance
   InstanceInitWaitCondition:
     Type: AWS::CloudFormation::WaitCondition
     Properties:
       Handle: !Ref InstanceInitWaitHandle
-      Timeout: "1800"
+      Timeout: '1800'
 
   EIPAssociation:
     Type: AWS::EC2::EIPAssociation
@@ -779,6 +943,9 @@ Resources:
         Ref: EIP
       InstanceId:
         Ref: AsteriskInstance
+
+Conditions:
+  SoftPhoneCIDRExists: !Not [!Equals [!Ref SoftPhoneCIDR, '']]
 
 Outputs:
   IPAddress:

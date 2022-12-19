@@ -4,17 +4,24 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Badge,
   Box,
+  Button,
   ColumnLayout,
   Container,
   Grid,
   Header,
+  Link,
   Popover,
   SpaceBetween,
   StatusIndicator,
+  Tabs,
   TextContent,
   Toggle,
 } from '@awsui/components-react';
+import rehypeRaw from 'rehype-raw';
+import ReactMarkdown from 'react-markdown';
+
 import RecordingPlayer from '../recording-player';
+import useSettingsContext from '../../contexts/settings';
 
 import { DONE_STATUS, IN_PROGRESS_STATUS } from '../common/get-recording-status';
 import { InfoLink } from '../common/info-link';
@@ -58,6 +65,15 @@ const CallAttributes = ({ item, setToolsOpen }) => (
             <strong>Call ID</strong>
           </Box>
           <div>{item.callId}</div>
+        </div>
+      </SpaceBetween>
+
+      <SpaceBetween size="xs">
+        <div>
+          <Box margin={{ bottom: 'xxxs' }} color="text-label">
+            <strong>Agent</strong>
+          </Box>
+          <div>{item.agentId}</div>
         </div>
       </SpaceBetween>
 
@@ -116,6 +132,24 @@ const CallAttributes = ({ item, setToolsOpen }) => (
           </StatusIndicator>
         </div>
       </SpaceBetween>
+      {item?.pcaUrl?.length && (
+        <SpaceBetween size="xs">
+          <div>
+            <Box margin={{ bottom: 'xxxs' }} color="text-label">
+              <strong>Post Call Analytics</strong>
+            </Box>
+            <Button
+              variant="normal"
+              href={item.pcaUrl}
+              target="_blank"
+              iconAlign="right"
+              iconName="external"
+            >
+              Open in Post Call Analytics
+            </Button>
+          </div>
+        </SpaceBetween>
+      )}
       {item?.recordingUrl?.length && (
         <SpaceBetween size="xs">
           <div>
@@ -129,6 +163,96 @@ const CallAttributes = ({ item, setToolsOpen }) => (
     </ColumnLayout>
   </Container>
 );
+const CallCategories = ({ item }) => {
+  const { settings } = useSettingsContext();
+  const regex = settings?.CategoryAlertRegex ?? '.*';
+
+  const categories = item.callCategories || [];
+
+  const categoryComponents = categories.map((t, i) => {
+    const className = t.match(regex)
+      ? 'transcript-segment-category-match-alert'
+      : 'transcript-segment-category-match';
+
+    return (
+      /* eslint-disable-next-line react/no-array-index-key */
+      <SpaceBetween size="xs" key={`call-category-${i}`}>
+        <div>
+          {/* eslint-disable-next-line react/no-array-index-key */}
+          <TextContent key={`call-category-${i}`} className={className}>
+            <ReactMarkdown rehypePlugins={[rehypeRaw]}>{t.trim()}</ReactMarkdown>
+          </TextContent>
+        </div>
+      </SpaceBetween>
+    );
+  });
+
+  return (
+    <Container
+      header={
+        <Header
+          variant="h4"
+          info={
+            <Link
+              variant="info"
+              target="_blank"
+              href="https://docs.aws.amazon.com/transcribe/latest/dg/call-analytics-create-categories.html"
+            >
+              Info
+            </Link>
+          }
+        >
+          Call Categories
+        </Header>
+      }
+    >
+      <ColumnLayout columns={6} variant="text-grid">
+        {categoryComponents}
+      </ColumnLayout>
+    </Container>
+  );
+};
+
+// eslint-disable-next-line arrow-body-style
+const CallSummary = ({ item }) => {
+  return (
+    <Container
+      header={
+        <Header
+          variant="h4"
+          info={
+            <Link
+              variant="info"
+              target="_blank"
+              href="https://docs.aws.amazon.com/transcribe/latest/dg/call-analytics-insights.html#call-analytics-insights-summarization"
+            >
+              Info
+            </Link>
+          }
+        >
+          Call Summary
+        </Header>
+      }
+    >
+      <Tabs
+        tabs={[
+          {
+            label: 'Issues',
+            id: 'issues',
+            content: (
+              <div>
+                {/* eslint-disable-next-line react/no-array-index-key */}
+                <TextContent color="gray" className="issue-detected">
+                  <ReactMarkdown rehypePlugins={[rehypeRaw]}>{item.issuesDetected}</ReactMarkdown>
+                </TextContent>
+              </div>
+            ),
+          },
+        ]}
+      />
+    </Container>
+  );
+};
 
 const getSentimentImage = (segment) => {
   const { sentiment, sentimentScore, sentimentWeighted } = segment;
@@ -181,17 +305,38 @@ const getTimestampFromSeconds = (secs) => {
 };
 
 const TranscriptContent = ({ segment }) => {
-  const { transcript, segmentId } = segment;
+  const { settings } = useSettingsContext();
+  const regex = settings?.CategoryAlertRegex ?? '.*';
+
+  const { transcript, segmentId, channel } = segment;
   const transcriptPiiSplit = transcript.split(piiTypesSplitRegEx);
   const transcriptComponents = transcriptPiiSplit.map((t, i) => {
     if (piiTypes.includes(t)) {
       // eslint-disable-next-line react/no-array-index-key
       return <Badge key={`${segmentId}-pii-${i}`} color="red">{`${t}`}</Badge>;
     }
+    let className = '';
+    let text = t;
+    switch (channel) {
+      case 'AGENT_ASSISTANT':
+        className = 'transcript-segment-agent-assist';
+        break;
+      case 'CATEGORY_MATCH':
+        if (text.match(regex)) {
+          className = 'transcript-segment-category-match-alert';
+          text = `Alert: ${text}`;
+        } else {
+          className = 'transcript-segment-category-match';
+          text = `Category: ${text}`;
+        }
+        break;
+      default:
+        break;
+    }
     return (
       // eslint-disable-next-line react/no-array-index-key
-      <TextContent key={`${segmentId}-text-${i}`} color="gray">
-        {t.trim()}
+      <TextContent key={`${segmentId}-text-${i}`} color="gray" className={className}>
+        <ReactMarkdown rehypePlugins={[rehypeRaw]}>{text.trim()}</ReactMarkdown>
       </TextContent>
     );
   });
@@ -203,32 +348,57 @@ const TranscriptContent = ({ segment }) => {
   );
 };
 
-const TranscriptSegment = ({ segment }) => (
-  <Grid
-    className="transcript-segment"
-    disableGutters
-    gridDefinition={[{ colspan: 1 }, { colspan: 11 }]}
-  >
-    {getSentimentImage(segment)}
-    <SpaceBetween direction="vertical" size="xxs">
-      <SpaceBetween direction="horizontal" size="xs">
-        <TextContent>
-          <strong>{segment.channel}</strong>
-        </TextContent>
-        <TextContent>
-          {`${getTimestampFromSeconds(segment.startTime)} -
-            ${getTimestampFromSeconds(segment.endTime)}`}
-        </TextContent>
+const TranscriptSegment = ({ segment }) => {
+  const { channel } = segment;
+
+  if (channel === 'CATEGORY_MATCH') {
+    const categoryText = `${segment.transcript}`;
+    const newSegment = segment;
+    newSegment.transcript = categoryText;
+    // We will return a special version of the grid thats specifically only for category.
+    return (
+      <Grid
+        className="transcript-segment"
+        disableGutters
+        gridDefinition={[{ colspan: 1 }, { colspan: 11 }]}
+      >
+        {getSentimentImage(segment)}
+        <SpaceBetween direction="vertical" size="xxs">
+          <TranscriptContent segment={newSegment} />
+        </SpaceBetween>
+      </Grid>
+    );
+  }
+
+  const channelClass = channel === 'AGENT_ASSISTANT' ? 'transcript-segment-agent-assist' : '';
+  return (
+    <Grid
+      className="transcript-segment"
+      disableGutters
+      gridDefinition={[{ colspan: 1 }, { colspan: 11 }]}
+    >
+      {getSentimentImage(segment)}
+      <SpaceBetween direction="vertical" size="xxs" className={channelClass}>
+        <SpaceBetween direction="horizontal" size="xs">
+          <TextContent>
+            <strong>{segment.channel}</strong>
+          </TextContent>
+          <TextContent>
+            {`${getTimestampFromSeconds(segment.startTime)} -
+              ${getTimestampFromSeconds(segment.endTime)}`}
+          </TextContent>
+        </SpaceBetween>
+        <TranscriptContent segment={segment} />
       </SpaceBetween>
-      <TranscriptContent segment={segment} />
-    </SpaceBetween>
-  </Grid>
-);
+    </Grid>
+  );
+};
 
 const CallInProgressTranscript = ({ item, callTranscriptPerCallId, autoScroll }) => {
   const bottomRef = useRef();
   const [turnByTurnSegments, setTurnByTurnSegments] = useState([]);
-  const maxChannels = 2;
+  // channels: AGENT, AGENT_ASSIST, CALLER, CATEGORY_MATCH
+  const maxChannels = 4;
   const { callId } = item;
   const transcriptsForThisCallId = callTranscriptPerCallId[callId] || {};
   const transcriptChannels = Object.keys(transcriptsForThisCallId).slice(0, maxChannels);
@@ -280,7 +450,7 @@ const CallInProgressTranscript = ({ item, callTranscriptPerCallId, autoScroll })
   );
 };
 
-const getTrascriptContent = ({ item, callTranscriptPerCallId, autoScroll }) => {
+const getTranscriptContent = ({ item, callTranscriptPerCallId, autoScroll }) => {
   switch (item.recordingStatusLabel) {
     case DONE_STATUS:
     case IN_PROGRESS_STATUS:
@@ -330,16 +500,27 @@ const CallTranscriptContainer = ({ setToolsOpen, item, callTranscriptPerCallId }
         </Header>
       }
     >
-      {getTrascriptContent({ item, callTranscriptPerCallId, autoScroll })}
+      {getTranscriptContent({ item, callTranscriptPerCallId, autoScroll })}
     </Container>
   );
 };
 
-const CallStatsContainer = ({ setToolsOpen, item, callTranscriptPerCallId }) => (
+const CallStatsContainer = ({ item, callTranscriptPerCallId }) => (
   <Container
     header={
-      <Header variant="h4" info={<InfoLink onFollow={() => setToolsOpen(true)} />}>
-        Call Statistics
+      <Header
+        variant="h4"
+        info={
+          <Link
+            variant="info"
+            target="_blank"
+            href="https://docs.aws.amazon.com/transcribe/latest/dg/call-analytics-insights.html#call-analytics-insights-sentiment"
+          >
+            Info
+          </Link>
+        }
+      >
+        Call Sentiment Analysis
       </Header>
     }
   >
@@ -391,6 +572,10 @@ const CallStatsContainer = ({ setToolsOpen, item, callTranscriptPerCallId }) => 
 export const CallPanel = ({ item, callTranscriptPerCallId, setToolsOpen }) => (
   <SpaceBetween size="s">
     <CallAttributes item={item} setToolsOpen={setToolsOpen} />
+    <Grid gridDefinition={[{ colspan: 6 }, { colspan: 6 }]}>
+      <CallSummary item={item} />
+      <CallCategories item={item} />
+    </Grid>
     <CallStatsContainer
       item={item}
       setToolsOpen={setToolsOpen}

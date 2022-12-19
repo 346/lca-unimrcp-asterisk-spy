@@ -41,6 +41,18 @@ else
   PUBLIC=false
 fi
 
+transcriber_dir=lambda_functions/call_transcriber
+echo "Installing dependencies for $transcriber_dir"
+pushd $transcriber_dir
+npm install
+popd
+
+pcaintegration_dir=lambda_functions/pca_integration
+echo "Installing dependencies for $pcaintegration_dir"
+pushd $pcaintegration_dir
+npm install
+popd
+
 # Create bucket if it doesn't already exist
 aws s3api list-buckets --query 'Buckets[].Name' | grep "\"$BUCKET\"" > /dev/null 2>&1
 if [ $? -ne 0 ]; then
