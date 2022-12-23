@@ -9,7 +9,6 @@ Parameters:
     Default: lca-audio-recordings/
     Description: >-
       The Amazon S3 prefix where the merged output audio files will be saved (must end in "/")
-
   CallAnalyticsPrefix:
     Type: String
     Default: lca-call-analytics/
@@ -19,17 +18,14 @@ Parameters:
     Type: String
     Description: >-
       Name of Kinesis Data Stream to publish events to
-
   KinesisDataStreamArn:
     Type: String
     Description: >-
       Arn of Kinesis Data Stream to publish events to
-
   S3BucketName:
     Type: String
     Description: >-
       S3 Bucket name for recordings
-
   TranscribeApiMode:
     Type: String
     Default: analytics
@@ -93,14 +89,12 @@ Parameters:
     Description: >-
       Select the PII entity types you want to identify or redact. Remove the values that you don't
       want to redact from the default.  DO NOT ADD CUSTOM VALUES HERE.
-
   CustomVocabularyName:
     Type: String
     Default: ''
     Description: >-
       The name of the vocabulary to use when processing the transcription job. Leave blank if no
       custom vocabulary to be used. If yes, the custom vocabulary must pre-exist in your account.
-
   CustomLanguageModelName:
     Type: String
     Default: ''
@@ -108,7 +102,6 @@ Parameters:
       The name of the custom language model to use when processing the transcription job. Leave blank if no
       custom language model is to be used. If specified, the custom language model must pre-exist in your account, 
       match the Language Code selected above, and use the 'Narrow Band' base model.
-
   SiprecLambdaHookFunctionArn:
     Default: ''
     Type: String
@@ -119,7 +112,6 @@ Parameters:
       The call start event from Chime Voice Connector (containing Siprec headers) is provided as input.
       The function must return a True/False flag to indicate if the call should be processed or ignored, 
       a mapped CallId, an AgentId, and may be extended to support additional features in future.
-
         
 Resources:
   ##########################################################################
@@ -330,7 +322,6 @@ Resources:
           - id: W11
             reason: >-
               Transcribe does not support resource-level permissions and KVS streams are dynamic
-
   AllowEventBridgeToCallTranscriberFunctionLambda:
     Type: "AWS::Lambda::Permission"
     Properties:

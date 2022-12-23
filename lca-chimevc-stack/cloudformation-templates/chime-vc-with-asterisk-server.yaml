@@ -26,6 +26,13 @@ Parameters:
   LatestImageId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-arm64-gp2
+  InstallDemoUnimrcpAsteriskModules:
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+    Description: Set to true to automatically install a demo unimrcp-Asterisk modules.
   SoftPhoneCIDR:
     Description: CIDR block for soft phone access (optional)
     Type: String
@@ -41,7 +48,6 @@ Parameters:
     Description: URL for Unimrcp source distribution tar file download - see https://www.unimrcp.org/
   DemoUnimrcpServerIp:
     Type: String
-    Default: 
     Description: Unimrcp server ip
   DemoAsteriskAgentAudioURL:
     Type: String
@@ -237,8 +243,10 @@ Resources:
           IpProtocol: '-1'
         - CidrIp:
             !If [DemoUnimrcpServerIp, !Ref DemoUnimrcpServerIp, !Ref 'AWS::NoValue']
-          Description: Unimrcp server ip
-          IpProtocol: '-1'
+          Description: open ports for unimrcp server
+          FromPort: 5000
+          IpProtocol: udp
+          ToPort: 65000
       VpcId:
         Ref: AsteriskVPC
   InstanceRole:
@@ -266,6 +274,21 @@ Resources:
     Properties:
       PolicyDocument:
         Statement:
+          - Action:
+              - dynamodb:BatchGet*
+              - dynamodb:DescribeStream
+              - dynamodb:DescribeTable
+              - dynamodb:Get*,
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:BatchWrite*
+              - dynamodb:CreateTable
+              - dynamodb:Delete*
+              - dynamodb:Update*
+              - dynamodb:PutItem
+            Effect: Allow
+            Resource: "*"
+
           - Action:
               - ssm:DescribeParameters
               - ssm:GetParameters
@@ -677,8 +700,9 @@ Resources:
           echo install OS updates and packages
           echo ================================
           HOMEDIR=/home/ec2-user
-          AGIBINDIR=/var/lib/asterisk/agi-bin
+          AGIBINDIR=/var/lib/asterisk/agi-bin/transcribe
           MRCPCONF=/etc/asterisk/mrcp.conf
+          MODULESCONF=/etc/asterisk/modules.conf
           yum update -y
           yum install -y aws-cfn-bootstrap
           yum install net-tools -y
@@ -726,13 +750,20 @@ Resources:
           PhoneNumber=$( aws ssm get-parameter --name /${AWS::StackName}/phoneNumber --region $REGION | jq -r '.Parameter.Value' )
           VoiceConnectorHost=$( aws ssm get-parameter --name /${AWS::StackName}/voiceConnector --region $REGION | jq -r '.Parameter.Value' )
           OutboundHostName=$( aws ssm get-parameter --name /${AWS::StackName}/outboundHostName --region $REGION | jq -r '.Parameter.Value' )
-          AgiTranscribe=
+          AgiTranscribe=https://raw.githubusercontent.com/VahagnKocharyan/lca-unimrcp-asterisk-spy/main/scripts/transcribe/agi_transcribe.py
+          AgiTranscribedb=https://raw.githubusercontent.com/VahagnKocharyan/lca-unimrcp-asterisk-spy/main/scripts/transcribe/dinamodb.py
+          AgiTranscribedbconf=https://raw.githubusercontent.com/VahagnKocharyan/lca-unimrcp-asterisk-spy/main/scripts/transcribe/config.py
+          AgiTranscribastconf=https://raw.githubusercontent.com/VahagnKocharyan/lca-unimrcp-asterisk-spy/main/scripts/transcribe/ast_unimrcp_spy.conf
           curl -L ${DemoAsteriskAgentAudioURL} --output /var/lib/asterisk/sounds/agent.wav
-          curl -L ${AgiTranscribe} --output $AGIBINDIR/transcribe/agi_transcribe.py
-          curl -L ${AgiTranscribe} --output $AGIBINDIR/transcribe/dinamodb.py
-          sed -i  's/DINAMO_DB_EVENT_TABLE=''/AWS_REGION='$EventSourcingTableName'/gI' $AGIBINDIR/transcribe/config.py
-          sed -i  's/DINAMO_DB_TRANSCRIBE_TABLE=''/AWS_REGION='$EventSourcingTableName'/gI' $AGIBINDIR/transcribe/config.py
-          if test "${ShouldInstallDemoUnimrcpAsteriskModules}" = true; 
+          mkdir -p $AGIBINDIR
+          curl -L $AgiTranscribe --output $AGIBINDIR/agi_transcribe.py
+          curl -L $AgiTranscribedb --output $AGIBINDIR/dinamodb.py
+          curl -L $AgiTranscribedbconf --output $AGIBINDIR/config.py
+          curl -L $AgiTranscribastconf --output  /etc/asterisk/ast_unimrcp_spy.conf
+          sed -i  "s/AWS_REGION=.*/AWS_REGION='$REGION'/gI" $AGIBINDIR/config.py
+          sed -i  "s/DINAMO_DB_EVENT_TABLE=.*/DINAMO_DB_EVENT_TABLE='${EventSourcingTableName}'/gI" $AGIBINDIR/config.py
+          sed -i  "s/DINAMO_DB_TRANSCRIBE_TABLE=.*/DINAMO_DB_TRANSCRIBE_TABLE='${EventSourcingTableName}'/gI" $AGIBINDIR/config.py
+          if test ${InstallDemoUnimrcpAsteriskModules} = true
           then
             pip3 install pyst2
             pip3 install boto3
@@ -741,10 +772,9 @@ Resources:
             wget http://www.unimrcp.org/project/component-view/unimrcp-deps-1-6-0-tar-gz/download -O unimrcp-deps-1.6.0.tar.gz
             tar xvzf unimrcp-deps-1.6.0.tar.gz
             cd unimrcp-deps-1.6.0/
-            sed -i  's/interactive/silent/gI' build-dep-libs.sh
-            sed -i  's:./configure --with-glib=no --without-doxygen --prefix=${SOFIA_INSTALLDIR}:./configure  CFLAGS=-fPIC --with-glib=no --enable-shared=yes  --without-doxygen --prefix=${SOFIA_INSTALLDIR} --build=aarch64-unknown-linux-gnu:gI' build-dep-libs.sh
+            sed -i  '29s/interactive/silent/gI' build-dep-libs.sh
+            sed -i  '68s/configure/configure  CFLAGS=-fPIC  --enable-shared=yes   --build=aarch64-unknown-linux-gnu  /gI' ./build-dep-libs.sh
             ./build-dep-libs.sh
-            
             cd $tmpdir
             wget ${DemoUnimrcpDownloadUrl} -O unimrcp.tar.gz
             tar xvzf unimrcp.tar.gz
@@ -766,11 +796,16 @@ Resources:
             make
             make install
             sed -i  's/server-ip = 10.0.0.2/server-ip = ${DemoUnimrcpServerIp}/gI' $MRCPCONF
-            sed -i  's/client-ip = 10.0.0.1/client-ip = $IP/gI' $MRCPCONF
-            sed -i  's/rtp-ip = 10.0.0.1/rtp-ip = $IP/gI' $MRCPCONF
-            echo "; extensions.conf - the Asterisk dial plan
-            ;
-            [general]
+            sed -i  "s/client-ip = 10.0.0.1/client-ip = $IP /gI" $MRCPCONF
+            sed -i  "s/rtp-ip = 10.0.0.1/rtp-ip = $IP /gI" $MRCPCONF           
+            sed -i '/^autoload = no/a load = func_channel.so' $MODULESCONF
+            sed -i '/^autoload = no/a load = res_speech.so' $MODULESCONF
+            sed -i '/^autoload = no/a load = res_agi.so' $MODULESCONF
+            sed -i '/^autoload = no/a load = app_chanspy.so' $MODULESCONF
+            sed -i '/^autoload = no/a load = app_originate.so' $MODULESCONF
+            sed -i '/^autoload = no/a load = app_unimrcp.so' $MODULESCONF
+
+            echo "[general]
             static=yes
             writeprotect=no
             clearglobalvars=no
@@ -778,26 +813,12 @@ Resources:
             [from-phone]
             exten => $PhoneNumber,1,Set(SPYGROUP=3300)
             
-            exten => $PhoneNumber,2,verbose(${CHANNEL(pjsip,call-id)}) 
-            exten => $PhoneNumber,3,Dial(PJSIP/$DemoTestNumberToCall,20,tU(originate__spy^${CHANNEL(pjsip,call-id)},${CALLERID(num)}))
-
-            exten=> 786,1,verbose(${SPYCHANNEL} ${CHANNEL(pjsip,call-id)}) 
-            exten => 786,2,agi(transcribe/agi_transcribe.py)
-
-            [originate__spy]
-            exten=> s,1,Set(SPYGROUP=3303)
-
-            exten => s,2,verbose("start spy on  channels " ${SPYGROUP} )
-
-            same => n,Originate(local/786@from-phone1,app,Chanspy,",g(3300)Eoq",,,av(SPYCHANNEL=CALLER^GLOBALID=${ARG1}))
-
-            same => n,Originate(local/786@from-phone1,app,Chanspy,",g(3303)Eoq",,,v(SPYCHANNEL=AGENT^GLOBALID=${ARG1}))
-              
-            " > /etc/asterisk/extensions.conf
+            exten => $PhoneNumber,2,Gosub(uniastspy,s,1(${DemoTestNumberToCall}))
+            #include ast_unimrcp_spy.conf"> /etc/asterisk/extensions.conf
 
             
           
-          ; fi;
+          fi
 
           
           echo =========================================
@@ -860,7 +881,7 @@ Resources:
           type=aor
           max_contacts=5" > /etc/asterisk/pjsip.conf
 
-          if test "${ShouldInstallDemoUnimrcpAsteriskModules}" = true; 
+          if test "${InstallDemoUnimrcpAsteriskModules}" = false
           then
             echo "; extensions.conf - the Asterisk dial plan
             ;
@@ -892,7 +913,7 @@ Resources:
 
             [phones]
             exten => $PhoneNumber,1,Dial(PJSIP/$PhoneNumber)" > /etc/asterisk/extensions.conf
-          ;fi;
+          fi
 
           echo "[options]
           runuser = asterisk
@@ -910,6 +931,10 @@ Resources:
           chown -R asterisk.asterisk /var/lib/asterisk
           chown -R asterisk.asterisk /var/log/asterisk
           chown -R asterisk.asterisk /var/spool/asterisk
+          if test "${InstallDemoUnimrcpAsteriskModules}" = true
+          then
+            chown -R asterisk.asterisk $AGIBINDIR
+          fi
 
           echo ================================
           echo Start asterisk and exit
@@ -946,7 +971,7 @@ Resources:
 
 Conditions:
   SoftPhoneCIDRExists: !Not [!Equals [!Ref SoftPhoneCIDR, '']]
-
+  DemoUnimrcpServerIp: !Not [!Equals [!Ref DemoUnimrcpServerIp, '']]
 Outputs:
   IPAddress:
     Value:

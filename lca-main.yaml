@@ -286,7 +286,6 @@ Parameters:
     Description: Set to true to automatically install a demo unimrcp-Asterisk modules.
   DemoUnimrcpServerIp:
     Type: String
-    Default: 
     Description: Unimrcp server ip
   DemoTestNumberToCall:
     Type: String
@@ -510,7 +509,7 @@ Metadata:
 Conditions:
   ShouldInstallDemoAsteriskServer: !Equals [!Ref CallAudioSource, 'Demo Asterisk PBX Server']
   ShouldInstallChimeVCsiprec: !Equals [!Ref CallAudioSource, 'Chime Voice Connector (SIPREC)']
-  ShouldInstallChimeVCStack: !Or [!Condition ShouldInstallDemoAsteriskServer, !Condition ShouldInstallChimeVCsiprec]
+  ShouldInstallChimeVCStack: !Or [!Condition ShouldInstallDemoAsteriskServer,!Condition ShouldInstallChimeVCsiprec]
   ShouldInstallGenesysAudiohookStack: !Equals [!Ref CallAudioSource, 'Genesys Cloud Audiohook Web Socket']
   ShouldInstallConnectIntegrationStack: !Equals [!Ref CallAudioSource, 'Amazon Connect Contact Lens']
   ShouldEnableAgentAssist: !Not [!Equals [!Ref AgentAssistOption, 'Disabled']]
@@ -763,10 +762,13 @@ Resources:
           - ShouldInstallDemoAsteriskServer
           - true
           - false
+        InstallDemoUnimrcpAsteriskModules: !If
+          - ShouldInstallDemoAsteriskServer
+          - true
+          - false
         DemoSoftphoneAllowedCidr: !Ref DemoSoftphoneAllowedCidr
         SiprecAllowedCidrList: !Ref SiprecAllowedCidrList
         DemoAsteriskDownloadUrl: !Ref DemoAsteriskDownloadUrl
-        ShouldInstallDemoUnimrcpAsteriskModules: !Ref ShouldInstallDemoUnimrcpAsteriskModules
         DemoTestNumberToCall: !Ref DemoTestNumberToCall
         DemoUnimrcpDownloadUrl: !Ref DemoUnimrcpDownloadUrl
         DemoUnimrcpServerIp: !Ref DemoUnimrcpServerIp
