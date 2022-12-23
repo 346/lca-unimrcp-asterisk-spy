@@ -234,7 +234,6 @@ Resources:
         S3BucketName: !Ref S3BucketName
         IsPartialTranscriptEnabled: !Ref IsPartialTranscriptEnabled
         TranscribeLanguageCode: !Ref TranscribeLanguageCode
-        TranscribePiiEntityTypes: !Ref TranscribePiiEntityTypes
         CustomVocabularyName: !Ref CustomVocabularyName
         CustomLanguageModelName: !Ref CustomLanguageModelName
   DeployChimeVCsiprec:

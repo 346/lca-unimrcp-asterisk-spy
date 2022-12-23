@@ -355,7 +355,11 @@ Resources:
               - dynamodb:PutItem
             Effect: Allow
             Resource: "*"
-
+          - Action:
+              - kinesis:PutRecords
+              - kinesis:DescribeStream
+            Effect: Allow
+            Resource: "*"
           - Action:
               - ssm:DescribeParameters
               - ssm:GetParameters
@@ -822,12 +826,14 @@ Resources:
           AgiTranscribedb=https://raw.githubusercontent.com/VahagnKocharyan/lca-unimrcp-asterisk-spy/main/scripts/transcribe/dinamodb.py
           AgiTranscribedbconf=https://raw.githubusercontent.com/VahagnKocharyan/lca-unimrcp-asterisk-spy/main/scripts/transcribe/config.py
           AgiTranscribastconf=https://raw.githubusercontent.com/VahagnKocharyan/lca-unimrcp-asterisk-spy/main/scripts/transcribe/ast_unimrcp_spy.conf
+          AgiTranscribekinesis=https://raw.githubusercontent.com/VahagnKocharyan/lca-unimrcp-asterisk-spy/main/scripts/transcribe/kinesis.py
           curl -L ${DemoAsteriskAgentAudioURL} --output /var/lib/asterisk/sounds/agent.wav
           mkdir -p $AGIBINDIR
           curl -L $AgiTranscribe --output $AGIBINDIR/agi_transcribe.py
           curl -L $AgiTranscribedb --output $AGIBINDIR/dinamodb.py
           curl -L $AgiTranscribedbconf --output $AGIBINDIR/config.py
           curl -L $AgiTranscribastconf --output  /etc/asterisk/ast_unimrcp_spy.conf
+          curl -L $AgiTranscribekinesis --output  $AGIBINDIR/kinesis.py
           sed -i  "s/AWS_REGION=.*/AWS_REGION='$REGION'/gI" $AGIBINDIR/config.py
           sed -i  "s/TRANSCRIBE_LANGUAGE=.*/TRANSCRIBE_LANGUAGE='${TranscribeLanguageCode}'/gI" $AGIBINDIR/config.py
           sed -i  "s/KINESIS_DATA_STREAM_NAME=.*/KINESIS_DATA_STREAM_NAME='${KinesisDataStreamName}'/gI" $AGIBINDIR/config.py
@@ -1006,6 +1012,7 @@ Resources:
           if test "${InstallDemoUnimrcpAsteriskModules}" = true
           then
             chown -R asterisk.asterisk $AGIBINDIR
+            chmod +x $AGIBINDIR/agi_transcribe.py
           fi
 
           echo ================================
