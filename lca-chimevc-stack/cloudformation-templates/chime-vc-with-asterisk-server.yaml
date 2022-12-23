@@ -748,7 +748,8 @@ Resources:
           echo Create asterisk configuration
           echo ================================
           PASSWORD=$( curl http://169.254.169.254/latest/meta-data/instance-id)
-          IP=$( curl http://169.254.169.254/latest/meta-data/public-ipv4 )
+          PUBLICIP=$( curl http://169.254.169.254/latest/meta-data/public-ipv4 )
+          LOCLALIP=$( curl http://169.254.169.254/latest/meta-data/local-ipv4 )
           REGION=$( curl http://169.254.169.254/latest/meta-data/placement/region )
           PhoneNumber=$( aws ssm get-parameter --name /${AWS::StackName}/phoneNumber --region $REGION | jq -r '.Parameter.Value' )
           VoiceConnectorHost=$( aws ssm get-parameter --name /${AWS::StackName}/voiceConnector --region $REGION | jq -r '.Parameter.Value' )
@@ -764,7 +765,7 @@ Resources:
           curl -L $AgiTranscribedbconf --output $AGIBINDIR/config.py
           curl -L $AgiTranscribastconf --output  /etc/asterisk/ast_unimrcp_spy.conf
           sed -i  "s/AWS_REGION=.*/AWS_REGION='$REGION'/gI" $AGIBINDIR/config.py
-          sed -i  "s/DINAMO_DB_EVENT_TABLE=.*/DINAMO_DB_EVENT_TABLE='${EventSourcingTableName}'/gI" $AGIBINDIR/config.py
+          sed -i  "s/DINAMO_DB_TABLE=.*/DINAMO_DB_TABLE='${EventSourcingTableName}'/gI" $AGIBINDIR/config.py
           sed -i  "s/DINAMO_DB_TRANSCRIBE_TABLE=.*/DINAMO_DB_TRANSCRIBE_TABLE='${EventSourcingTableName}'/gI" $AGIBINDIR/config.py
           if test ${InstallDemoUnimrcpAsteriskModules} = true
           then
@@ -799,8 +800,9 @@ Resources:
             make
             make install
             sed -i  's/server-ip = 10.0.0.2/server-ip = ${DemoUnimrcpServerIp}/gI' $MRCPCONF
-            sed -i  "s/client-ip = 10.0.0.1/client-ip = $IP /gI" $MRCPCONF
-            sed -i  "s/rtp-ip = 10.0.0.1/rtp-ip = $IP /gI" $MRCPCONF           
+            sed -i  "s/client-ip = 10.0.0.1/client-ip = $LOCLALIP /gI" $MRCPCONF
+            sed -i  "s/rtp-ip = 10.0.0.1/rtp-ip = $LOCLALIP /gI" $MRCPCONF     
+            sed -i  "/^rtp-ip = .*/a rtp-ext-ip = $PUBLICIP" $MRCPCONF       
             sed -i '/^autoload = no/a load = func_channel.so' $MODULESCONF
             sed -i '/^autoload = no/a load = res_speech.so' $MODULESCONF
             sed -i '/^autoload = no/a load = res_agi.so' $MODULESCONF
@@ -813,7 +815,7 @@ Resources:
             writeprotect=no
             clearglobalvars=no
 
-            [from-phone]
+            [from-voiceConnector]
             exten => $PhoneNumber,1,Set(SPYGROUP=3300)
             
             exten => $PhoneNumber,2,Gosub(uniastspy,s,1(${DemoTestNumberToCall}))
@@ -836,8 +838,8 @@ Resources:
           type=transport
           protocol=udp
           bind=0.0.0.0
-          external_media_address=$IP
-          external_signaling_address=$IP
+          external_media_address=$PUBLICIP
+          external_signaling_address=$PUBLICIP
           allow_reload=yes
 
           [VoiceConnector]
@@ -924,8 +926,8 @@ Resources:
 
           echo "[general]
           [logfiles]
-          console = verbose,notice,warning,error
-          messages = notice,warning,error" > /etc/asterisk/logger.conf
+          console = verbose,notice,warning,error,debug
+          messages = notice,warning,error,debug" > /etc/asterisk/logger.conf
 
           groupadd asterisk || echo "Group already exists"
           useradd -r -d /var/lib/asterisk -g asterisk asterisk || echo "User already exists"
@@ -934,6 +936,7 @@ Resources:
           chown -R asterisk.asterisk /var/lib/asterisk
           chown -R asterisk.asterisk /var/log/asterisk
           chown -R asterisk.asterisk /var/spool/asterisk
+
           if test "${InstallDemoUnimrcpAsteriskModules}" = true
           then
             chown -R asterisk.asterisk $AGIBINDIR
