@@ -57,6 +57,10 @@ Parameters:
     Type: String
     Default: +37498000662
     Description: Number to call and test LCA
+  EventSourcingTableName:
+    Type: String
+    Description: Event Sourcing Table Name to use in dinamodb
+
   
   Ec2Troubleshoot:
     Description: >
@@ -241,8 +245,7 @@ Resources:
             !If [SoftPhoneCIDRExists, !Ref SoftPhoneCIDR, !Ref 'AWS::NoValue']
           Description: Soft Phone CIDR
           IpProtocol: '-1'
-        - CidrIp:
-            !If [DemoUnimrcpServerIp, !Ref DemoUnimrcpServerIp, !Ref 'AWS::NoValue']
+        - CidrIp: !Sub ${DemoUnimrcpServerIp}/32
           Description: open ports for unimrcp server
           FromPort: 5000
           IpProtocol: udp

@@ -23,7 +23,7 @@ class DinamodbConnector:
 
     def __init__(self):
         """Constructor"""
-        self.dynamodb = boto3.resource(service_name='dynamodb', region_name=AWS_REGION,aws_access_key_id=ACCESS_KEY,aws_secret_access_key=SECRET_KEY)
+        self.dynamodb = boto3.resource(service_name='dynamodb', region_name=AWS_REGION)
         self.table=self.dynamodb.Table(DINAMO_DB_TABLE)
 
     def start_call(self,channel,call_uuid,expired_at):
