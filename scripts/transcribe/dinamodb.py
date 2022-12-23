@@ -15,6 +15,7 @@ import sys
 from config import *
 from datetime import datetime, timedelta
 import boto3
+from kinesis import *
 from botocore.exceptions import ClientError
 
 class DinamodbConnector:
@@ -25,6 +26,7 @@ class DinamodbConnector:
         """Constructor"""
         self.dynamodb = boto3.resource(service_name='dynamodb', region_name=AWS_REGION)
         self.table=self.dynamodb.Table(DINAMO_DB_TABLE)
+        self.kinesisds=KinesisStream(KINESIS_DATA_STREAM_NAME)
 
     def start_call(self,channel,call_uuid,expired_at):
         result = dict()
@@ -89,11 +91,29 @@ class DinamodbConnector:
                 'EventType': 'ADD_TRANSCRIPT_SEGMENT',
                 'CreatedAt': time,
                 'ExpiresAfter': expired_at,
+                'Sentiment': None,
+                'IssuesDetected': None,
             }
+
             
             response=self.table.put_item(
                 Item=Item
             )
+            KINItem={
+                'Channel': channel,
+                'CallId': call_uuid,
+                'SegmentId': segmentid,
+                'StartTime': start_time,
+                'EndTime': end_time,
+                'Transcript': transcript,
+                'IsPartial': is_partial,
+                'EventType': 'ADD_TRANSCRIPT_SEGMENT',
+                'CreatedAt': time,
+                'ExpiresAfter': expired_at,
+                'Sentiment': None,
+                'IssuesDetected': None,
+            }
+            self.kinesisds.send_stream(KINItem,call_uuid)
         
             result['status'] = True
             result['string'] = 'Your query is successfully committed' 

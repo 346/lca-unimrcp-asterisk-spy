@@ -7,6 +7,7 @@
 import sys
 from asterisk.agi import *
 from dinamodb import *
+from config import TRANSCRIBE_LANGUAGE
 import json
 from datetime import datetime, timedelta
 
@@ -146,7 +147,7 @@ class TranscribeApp:
 
 
 agi = AGI()
-options = 't=3000&sct=1000&sint=15000&nit=10000&nif=json'
+options = f't=3000&sct=1000&sint=15000&nit=10000&nif=json&spl={TRANSCRIBE_LANGUAGE}'
 dinamo_db = DinamodbConnector()
 App = TranscribeApp(options)
 

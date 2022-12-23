@@ -227,6 +227,16 @@ Resources:
         DemoUnimrcpDownloadUrl: !Ref DemoUnimrcpDownloadUrl
         DemoUnimrcpServerIp: !Ref DemoUnimrcpServerIp
         EventSourcingTableName: !Ref EventSourcingTableName
+        AudioFilePrefix: !Ref AudioFilePrefix
+        CallAnalyticsPrefix: !Ref CallAnalyticsPrefix
+        KinesisDataStreamName: !Ref KinesisDataStreamName
+        KinesisDataStreamArn: !Ref KinesisDataStreamArn
+        S3BucketName: !Ref S3BucketName
+        IsPartialTranscriptEnabled: !Ref IsPartialTranscriptEnabled
+        TranscribeLanguageCode: !Ref TranscribeLanguageCode
+        TranscribePiiEntityTypes: !Ref TranscribePiiEntityTypes
+        CustomVocabularyName: !Ref CustomVocabularyName
+        CustomLanguageModelName: !Ref CustomLanguageModelName
   DeployChimeVCsiprec:
     Type: AWS::CloudFormation::Stack
     Condition: ShouldInstallChimeVCsiprec
