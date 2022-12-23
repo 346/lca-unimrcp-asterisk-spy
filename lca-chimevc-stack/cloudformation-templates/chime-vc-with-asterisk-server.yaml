@@ -356,8 +356,7 @@ Resources:
             Effect: Allow
             Resource: "*"
           - Action:
-              - kinesis:PutRecords
-              - kinesis:DescribeStream
+              - kinesis: "*"
             Effect: Allow
             Resource: "*"
           - Action:
@@ -836,6 +835,7 @@ Resources:
           curl -L $AgiTranscribekinesis --output  $AGIBINDIR/kinesis.py
           sed -i  "s/AWS_REGION=.*/AWS_REGION='$REGION'/gI" $AGIBINDIR/config.py
           sed -i  "s/TRANSCRIBE_LANGUAGE=.*/TRANSCRIBE_LANGUAGE='${TranscribeLanguageCode}'/gI" $AGIBINDIR/config.py
+          sed -i  "s/CALLEE_ID=.*/CALLEE_ID='${DemoTestNumberToCall}'/gI" $AGIBINDIR/config.py
           sed -i  "s/KINESIS_DATA_STREAM_NAME=.*/KINESIS_DATA_STREAM_NAME='${KinesisDataStreamName}'/gI" $AGIBINDIR/config.py
           sed -i  "s/DINAMO_DB_TABLE=.*/DINAMO_DB_TABLE='${EventSourcingTableName}'/gI" $AGIBINDIR/config.py
           sed -i  "s/DINAMO_DB_TRANSCRIBE_TABLE=.*/DINAMO_DB_TRANSCRIBE_TABLE='${EventSourcingTableName}'/gI" $AGIBINDIR/config.py

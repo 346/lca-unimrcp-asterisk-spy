@@ -28,7 +28,7 @@ class DinamodbConnector:
         self.table=self.dynamodb.Table(DINAMO_DB_TABLE)
         self.kinesisds=KinesisStream(KINESIS_DATA_STREAM_NAME)
 
-    def start_call(self,channel,call_uuid,expired_at):
+    def start_call(self,channel,call_uuid,expired_at,caller_id):
         result = dict()
         result['status'] = False
 
@@ -64,8 +64,8 @@ class DinamodbConnector:
                 'CallId': call_uuid,
                 'EventType': 'START',
                 'CreatedAt': time,
-                'CustomerPhoneNumber':'+37498000662',
-                'SystemPhoneNumber':'+37498000662',
+                'CustomerPhoneNumber':caller_id,
+                'SystemPhoneNumber': CALLEE_ID,
             }
             response=self.kinesisds.send_stream(KINItem,call_uuid)
         
