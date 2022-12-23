@@ -47,19 +47,30 @@ class DinamodbConnector:
             response=self.table.put_item(
               Item=Item
             )
-            Item={
-                'PK': 'ce#%s' %call_uuid,
-                'SK': 'ts#%s#et#START#c#%s' %(time,channel),
+            # Item={
+            #     'PK': 'ce#%s' %call_uuid,
+            #     'SK': 'ts#%s#et#START#c#%s' %(time,channel),
+            #     'Channel': channel,
+            #     'CallId': call_uuid,
+            #     'EventType': 'END',
+            #     'CreatedAt': time,
+            #     'ExpiresAfter': expired_at,
+            # }
+            # response=self.table.put_item(
+            #   Item=Item
+            # )
+            KINItem={
                 'Channel': channel,
                 'CallId': call_uuid,
-                'EventType': 'END',
+                'EventType': 'START',
                 'CreatedAt': time,
-                'ExpiresAfter': expired_at,
+                'CustomerPhoneNumber':'+37498000662',
+                'SystemPhoneNumber':'+37498000662',
             }
-            response=self.table.put_item(
-              Item=Item
-            )
+            response=self.kinesisds.send_stream(KINItem,call_uuid)
+        
             result['status'] = True
+            result['kinesis']=response
             result['string'] = 'Your query is successfully committed' 
             
         except Exception as e:
@@ -113,9 +124,10 @@ class DinamodbConnector:
                 'Sentiment': None,
                 'IssuesDetected': None,
             }
-            self.kinesisds.send_stream(KINItem,call_uuid)
+            response=self.kinesisds.send_stream(KINItem,call_uuid)
         
             result['status'] = True
+            result['kinesis']=response
             result['string'] = 'Your query is successfully committed' 
             
         except ClientError as e:
