@@ -356,7 +356,7 @@ Resources:
             Effect: Allow
             Resource: "*"
           - Action:
-              - kinesis: "*"
+              - kinesis:"*"
             Effect: Allow
             Resource: "*"
           - Action:
