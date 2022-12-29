@@ -22,25 +22,30 @@ class DinamodbConnector:
 
     """A Dinamo database connector class"""
 
-    def __init__(self):
+    def __init__(self,channel,call_uuid,caller_id,system_dnid):
         """Constructor"""
         self.dynamodb = boto3.resource(service_name='dynamodb', region_name=AWS_REGION)
         self.table=self.dynamodb.Table(DINAMO_DB_TABLE)
         self.kinesisds=KinesisStream(KINESIS_DATA_STREAM_NAME)
+        self.channel=channel
+        self.call_uuid=call_uuid
+        self.caller_id=caller_id
+        self.system_dnid=system_dnid
+        
 
-    def start_call(self,channel,call_uuid,expired_at,caller_id):
+    def write_event(self,expired_at,event):
         result = dict()
         result['status'] = False
-
+        time=datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
         try:
-            time=datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+            
 
             Item={
-                'PK': 'ce#%s' %call_uuid,
-                'SK': 'ts#%s#et#START#c#%s' %(time,channel),
-                'Channel': channel,
-                'CallId': call_uuid,
-                'EventType': 'START',
+                'PK': 'ce#%s' %self.call_uuid,
+                'SK': 'ts#%s#et#START#c#%s' %(time,self.channel),
+                'Channel': self.channel,
+                'CallId': self.call_uuid,
+                'EventType': event,
                 'CreatedAt': time,
                 'ExpiresAfter': expired_at,
             }
@@ -60,14 +65,14 @@ class DinamodbConnector:
             #   Item=Item
             # )
             KINItem={
-                'Channel': channel,
-                'CallId': call_uuid,
-                'EventType': 'START',
+                'Channel': self.channel,
+                'CallId': self.call_uuid,
+                'EventType': event,
                 'CreatedAt': time,
-                'CustomerPhoneNumber':caller_id,
-                'SystemPhoneNumber': CALLEE_ID,
+                'CustomerPhoneNumber': self.caller_id,
+                'SystemPhoneNumber': self.system_dnid,
             }
-            response=self.kinesisds.send_stream(KINItem,call_uuid)
+            response=self.kinesisds.send_stream(KINItem,self.call_uuid)
         
             result['status'] = True
             result['kinesis']=response
@@ -80,7 +85,7 @@ class DinamodbConnector:
         return result
 
  
-    def add_segment_record(self,channel,call_uuid,segmentid,start_time,end_time,transcript,is_partial,expired_at):
+    def add_segment_record(self,segmentid,start_time,end_time,transcript,is_partial,expired_at):
         """Inserts a new record with call data"""
         result = dict()
         result['status'] = False
@@ -90,10 +95,10 @@ class DinamodbConnector:
             time=datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%fZ')
 
             Item={
-                'PK': f'ce#{call_uuid}',
-                'SK': f'ts#{time}#et#ADD_TRANSCRIPT_SEGMENT#c#{channel}',
-                'Channel': channel,
-                'CallId': call_uuid,
+                'PK': f'ce#{self.call_uuid}',
+                'SK': f'ts#{time}#et#ADD_TRANSCRIPT_SEGMENT#c#{self.channel}',
+                'Channel': self.channel,
+                'CallId': self.call_uuid,
                 'SegmentId': segmentid,
                 'StartTime': start_time,
                 'EndTime': end_time,
@@ -111,8 +116,8 @@ class DinamodbConnector:
                 Item=Item
             )
             KINItem={
-                'Channel': channel,
-                'CallId': call_uuid,
+                'Channel': self.channel,
+                'CallId': self.call_uuid,
                 'SegmentId': segmentid,
                 'StartTime': start_time,
                 'EndTime': end_time,
@@ -124,7 +129,7 @@ class DinamodbConnector:
                 'Sentiment': None,
                 'IssuesDetected': None,
             }
-            response=self.kinesisds.send_stream(KINItem,call_uuid)
+            response=self.kinesisds.send_stream(KINItem,self.call_uuid)
         
             result['status'] = True
             result['kinesis']=response

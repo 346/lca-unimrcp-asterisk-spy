@@ -26,7 +26,7 @@ class KinesisStream(object):
                 PartitionKey=partition_key
             )
             result['status'] = True
-            result['string'] = response.text
+            result['string'] = str(response)
         except ClientError as e:
             result['error_cause'] = 'AWS BOTO3  Error : %s' % e
 

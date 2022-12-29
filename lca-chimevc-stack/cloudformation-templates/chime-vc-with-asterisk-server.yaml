@@ -336,6 +336,11 @@ Resources:
             - - 'arn:'
               - Ref: AWS::Partition
               - :iam::aws:policy/AmazonSSMManagedInstanceCore
+        - Fn::Join:
+            - ''
+            - - 'arn:'
+              - Ref: AWS::Partition
+              - :iam::aws:policy/AmazonKinesisFullAccess
   InstanceDefaultPolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -353,10 +358,6 @@ Resources:
               - dynamodb:Delete*
               - dynamodb:Update*
               - dynamodb:PutItem
-            Effect: Allow
-            Resource: "*"
-          - Action:
-              - kinesis:"*"
             Effect: Allow
             Resource: "*"
           - Action:

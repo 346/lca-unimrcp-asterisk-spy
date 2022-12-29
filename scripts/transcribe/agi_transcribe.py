@@ -39,6 +39,10 @@ class TranscribeApp:
         self.action = agi.get_variable("ACTION") 
         self.channel= agi.get_variable("SPYCHANNEL")
         self.callid=agi.get_variable("GLOBALID")
+        self.caller_id=agi.get_variable('CHCALLERID')
+        self.systemdnid=agi.get_variable('SYSTEMDNID')
+        self.dinamodb= DinamodbConnector(self.channel,self.callid,self.caller_id,self.systemdnid)
+        self.event="START"
 
     def recog(self):
         """This is an internal function which calls MRCPRecog"""
@@ -58,11 +62,12 @@ class TranscribeApp:
         self.cause = agi.get_variable('RECOG_COMPLETION_CAUSE')
         # agi.verbose('got completion cause %s' % self.cause)
 
-   
-    def get_caller_id(self):
-        """Retrieves caller_id_number from the data returned by FS"""
-        return agi.env['agi_callerid']
 
+    def get_system_dnid(self):
+        """Retrieves caller_id_number from the data returned by FS"""
+        # return agi.env['agi_callerid']
+        agi.verbose("info",'got system dnid %s' % agi.get_variable('SYSTEMDNID'))
+        return agi.get_variable('SYSTEMDNID')
 
     def get_call_uuid(self):
         """Retrieves current uuid from the data returned by FS"""
@@ -76,7 +81,8 @@ class TranscribeApp:
 
     def get_expired_at(self):
         expires_at = int((datetime.now() + timedelta(days=int(90))).timestamp())
-        agi.verbose('got segmentid %s' % expires_at)
+        if self.event=='START':
+            agi.verbose('got segmentid %s' % expires_at)
         return expires_at
 
     def get_segmentid(self):
@@ -105,20 +111,31 @@ class TranscribeApp:
         agi.verbose('got is_partial %s' % is_partial)
         return is_partial
 
-    def start(self):
-        agi.verbose('got dcfdfffffffffffffffffffffffffffffffff %s' % self.callid)
-        result=dinamo_db.start_call(self.channel,self.callid,self.get_expired_at(),self.get_caller_id())
+    def verify_db_result(self,result):
         if result['status'] == True:
+            if self.event=='END':
+                raise AGISIGHUPHangup(f"{result['string']}")
+                
             agi.verbose(result['string'])
+            agi.verbose(str(result['kinesis']))
         else:
+            if self.event=='END':
+                raise AGISIGHUPHangup(f"{result['error_cause']}")
             agi.verbose(result['error_cause'])
 
+    def write_event(self):
+        
+        result=self.dinamodb.write_event(self.get_expired_at(),self.event)
+        self.verify_db_result(result)
+        agi.verbose('got event %s' % self.event)
+        agi.verbose('got  caller id number :  %s,got systemnumber : %s' %(self.caller_id,self.systemdnid))
+        
+
+    
+
     def add_segment_record(self):
-        result=dinamo_db.add_segment_record(self.channel,self.callid,self.get_segmentid(),self.get_start_time(),self.get_end_time(),self.get_transcript(),self.get_is_partial(),self.get_expired_at())
-        if result['status'] == True:
-            agi.verbose(result['string'])
-        else:
-            agi.verbose(result['error_cause'])
+        result=self.dinamodb.add_segment_record(self.get_segmentid(),self.get_start_time(),self.get_end_time(),self.get_transcript(),self.get_is_partial(),self.get_expired_at())
+        self.verify_db_result(result)
         
 
 
@@ -130,7 +147,7 @@ class TranscribeApp:
 
 
     def run(self):
-        self.start()
+        self.write_event()
         processing = True
         while processing:
             self.recog()
@@ -147,10 +164,19 @@ class TranscribeApp:
 
 
 
+
 agi = AGI()
-options = f't=3000&sct=1000&sint=15000&nit=10000&nif=json&spl={TRANSCRIBE_LANGUAGE}'
-dinamo_db = DinamodbConnector()
+agi.answer()
+options = f't=3000&sct=1000&sint=15000&nit=30000&nif=json&spl={TRANSCRIBE_LANGUAGE}'
 App = TranscribeApp(options)
 
+"""to replace or register a method in the other class"""
+def new_test_hangup():
+    if agi._got_sighup:
+        App.event='END'
+        App.write_event()
+        
+agi.test_hangup = new_test_hangup
+
 App.run()
-agi.verbose('exiting')
+
