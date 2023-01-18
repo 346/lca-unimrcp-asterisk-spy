@@ -889,8 +889,7 @@ Resources:
             clearglobalvars=no
 
             [from-voiceConnector]
-            exten => $PhoneNumber,1,Set(SPYGROUP=3300)
-            
+            exten => $PhoneNumber,1,verbose(Starting)
             exten => $PhoneNumber,2,Gosub(uniastspy,s,1(${DemoTestNumberToCall}))
             #include ast_unimrcp_spy.conf"> /etc/asterisk/extensions.conf
 
