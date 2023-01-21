@@ -402,15 +402,16 @@ const CallInProgressTranscript = ({ item, callTranscriptPerCallId, autoScroll })
   const { callId } = item;
   const transcriptsForThisCallId = callTranscriptPerCallId[callId] || {};
   const transcriptChannels = Object.keys(transcriptsForThisCallId).slice(0, maxChannels);
-
+  const getDate = (returndate) => new Date(returndate.createdAt);
   const getTurnByTurnSegments = () => {
     const currentTurnByTurnSegments = transcriptChannels
       .map((c) => {
         const { segments } = transcriptsForThisCallId[c];
+        console.log(segments);
         return segments;
       })
       // sort entries by end time
-      .reduce((p, c) => [...p, ...c].sort((a, b) => a.endTime - b.endTime), [])
+      .reduce((p, c) => [...p, ...c].sort((a, b) => getDate(a) - getDate(b)), [])
       .map(
         // prettier-ignore
         (s) => (
@@ -419,18 +420,18 @@ const CallInProgressTranscript = ({ item, callTranscriptPerCallId, autoScroll })
           && <TranscriptSegment key={`${s.segmentId}-${s.createdAt}}`} segment={s} />
         ),
       );
-
     // this element is used for scrolling to bottom and to provide padding
     currentTurnByTurnSegments.push(<div key="bottom" ref={bottomRef} />);
-
     return currentTurnByTurnSegments;
   };
 
   useEffect(() => {
+    console.log(getTurnByTurnSegments());
     setTurnByTurnSegments(getTurnByTurnSegments());
   }, [callTranscriptPerCallId, item.recordingStatusLabel]);
 
   useEffect(() => {
+    console.log(turnByTurnSegments);
     // prettier-ignore
     if (
       item.recordingStatusLabel === IN_PROGRESS_STATUS

@@ -367,6 +367,9 @@ Metadata:
         Parameters:
           - CallAudioSource
           - DemoSoftphoneAllowedCidr
+          - InstallDemoUnimrcpAsteriskModules
+          - DemoUnimrcpServerIp
+          - DemoTestNumberToCall
           - SiprecAllowedCidrList
           - SiprecLambdaHookFunctionArn
           - ConnectInstanceArn
