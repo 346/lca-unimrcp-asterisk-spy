@@ -426,12 +426,11 @@ const CallInProgressTranscript = ({ item, callTranscriptPerCallId, autoScroll })
   };
 
   useEffect(() => {
-    console.log(getTurnByTurnSegments());
+    getTurnByTurnSegments();
     setTurnByTurnSegments(getTurnByTurnSegments());
   }, [callTranscriptPerCallId, item.recordingStatusLabel]);
 
   useEffect(() => {
-    console.log(turnByTurnSegments);
     // prettier-ignore
     if (
       item.recordingStatusLabel === IN_PROGRESS_STATUS
